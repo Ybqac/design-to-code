@@ -1,0 +1,52 @@
+---
+description: design-to-code workflow for Figma/screenshots. Triggers when user asks to convert a Figma design, design draft, screenshot, mockup, or visual to frontend code, or mentions restoring/implementing a UI page.
+globs:
+  - "src/**"
+  - "pages/**"
+  - "components/**"
+  - "**/*.tsx"
+  - "**/*.jsx"
+  - "**/*.vue"
+  - "**/*.wxml"
+alwaysApply: false
+---
+
+# Design-to-Code (Figma + screenshot fusion)
+
+When the user asks to convert a Figma design, design draft, screenshot, mockup, or visual to frontend code, follow this workflow.
+
+## Fusion workflow (7 steps)
+
+1. **Source** — user provides a screenshot and/or Figma link. With a link, call Figma MCP `get_metadata` / `get_design_context` first to get the node tree.
+2. **Export ground truth** — call MCP `get_variable_defs` (or REST API fallback), write `design-ground-truth.json` with every value carrying a nodeId.
+3. **Read screenshot visually** — output ONLY a structured layout description (parent-child nesting, visual grouping, alignment, relative spacing, hierarchy). Do NOT report pixel values — that's ground-truth's job. Relative words only: tight / normal / loose, fixed / auto / stretch.
+4. **Fusion** — on conflict: structure & layout follow the screenshot; exact values follow ground-truth.json. When they disagree on which elements exist, the screenshot wins. Document every deviation in delivery notes.
+5. **Generate code** — use the framework-specific rules (React/Vue/miniapp). Only use components from the design-system registry. If a component isn't in the registry, use semantic native tags and comment "TODO: replace with design-system XXX" — never fabricate a same-named component.
+6. **Verify** — run `node scripts/verify-ground-truth.js <code-dir> design-ground-truth.json`. `[UNMATCHED]` must be zero. Items tagged "screenshot estimate" appear as `[PENDING]` and are acceptable but must be listed in delivery notes.
+7. **Loop** — headless-render the page, visually diff against the screenshot, fix structural discrepancies. Pixel color diffs are acceptable (screenshots are not color-trustworthy).
+
+## Four anti-fabrication red lines
+
+1. **No placeholder image URLs** — never `placeholder.com`, `via.placeholder`, `placehold.co`, `picsum.photos`, `loremflickr`, `unsplash.com` random. When no asset exists, use a `<div>` with `role="img"` and a `<!-- TODO: replace with asset from nodeId -->` comment. Maintain a `missing-assets.md` listing all TODOs.
+2. **No invented copy** — only transcribe text visible in the screenshot. Don't invent product names, button labels, error messages, copyright years, or extend lorem ipsum as real copy.
+3. **No fabricated components** — only use components in the design-system registry. If missing, use semantic native tags (`<button>`, `<div>`+className) and comment "TODO: replace with design-system XXX". Never create a new same-named component.
+4. **No invented values** — every color / font-size / border-radius / gap / z-index must either (a) be in `design-ground-truth.json` (annotate `/* from nodeId */`), (b) be a design-system token, or (c) be explicitly tagged `<!-- screenshot estimate -->` and listed in `pending-review.md`.
+
+## Conflict arbitration
+
+| Dimension | Follow | Reason |
+|---|---|---|
+| Component tree, nesting | screenshot | MCP garbles hierarchy when auto-layout is missing |
+| Visual grouping, card boundaries | screenshot | MCP merges independent cards |
+| Flex direction (row/column) | screenshot | Framelink #232 — cross-axis can be wrong |
+| Alignment (start/center/between) | screenshot | read from justify, don't guess |
+| Wrap / equal-height | screenshot | MCP can't recover these reliably |
+| Color, font-size, weight, family | ground-truth.json | screenshots are not color-trustworthy |
+| border / radius / shadow exact values | ground-truth.json | screenshots lack pixel precision |
+| Exact spacing pixel values | ground-truth.json | but *presence and grouping* of spacing follows the screenshot |
+| z-index / opacity / blend | ground-truth.json | screenshots can't recover stacking |
+| Copy text content | screenshot | screenshot shows the real text; ground-truth is just a check |
+
+## Fallback (bitmap-only, no Figma source)
+
+If only a screenshot is available (no Figma link, no MCP), use Surya or PP-StructureV3 to extract a layout bbox + OCR text as auxiliary input. OCR text is NOT copy ground-truth — the screenshot still is. All values are tagged "screenshot estimate" in this mode; `verify-ground-truth.js` will report all `[PENDING]` (acceptable). See `references/fallback-bitmap-only.md`.

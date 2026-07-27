@@ -1,0 +1,17 @@
+{
+  "design-to-code-anti-fabrication": {
+    "enabled": true,
+    "PreToolUse": [
+      {
+        "matcher": "write_to_file|replace_file_content|multi_replace_file_content",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .agents/plugins/design-to-code/scripts/dtc-hook.js",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

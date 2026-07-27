@@ -1,0 +1,16 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Node（verify-ground-truth.js 零依赖，但留个标准 gitignore 以防扩展）
+node_modules/
+*.log
+
+# 本地校验产物
+design-ground-truth.json
+missing-assets.md
+pending-review.md

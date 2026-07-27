@@ -1,0 +1,33 @@
+{
+  "_comment": "Antigravity workspace hooks 配置（design-to-code P3 自动护栏）。复制到 <repo>/.agents/hooks.json。按官方契约（https://antigravity.google/docs/ide/hooks）：顶层是命名 hook map，每个 hook 含 PreToolUse/PostToolUse 数组，每项 {matcher, hooks:[{type,command,timeout}]}。阻断靠 stdout JSON {decision:'ask'|'deny', reason:...}，不靠 exit code。",
+  "_install_steps": [
+    "1. 复制 templates/antigravity-hook-script.js 到 <repo>/.agents/scripts/dtc-hook.js 并 chmod +x",
+    "2. 把本文件去掉所有 _ 开头的注释字段后，内容并入 <repo>/.agents/hooks.json（若已存在 hooks.json，顶层 key 合并）",
+    "3. command 用相对路径 .agents/scripts/dtc-hook.js（Antigravity 在 workspace 根执行）",
+    "4. matcher 是正则，匹配 write_to_file|replace_file_content|multi_replace_file_content 三种写工具",
+    "5. 重启会话或刷新 hooks，用一次故意写 picsum URL 的 write_to_file 验证是否弹 ask 确认",
+    "6. PostToolUse 在官方契约里 stdout 必须是空 {}，不能反馈模型——所以只用 PreToolUse 拦截，不用 PostToolUse"
+  ],
+  "_official_contract_notes": {
+    "stdin_payload": "{toolCall:{name,args:{TargetFile,CodeContent,ReplacementContent,ReplacementChunks}},workspacePaths,conversationId,...}",
+    "stdout_decision": "allow | deny | ask | force_ask（PreToolUse 有效）",
+    "exit_code": "无契约，靠 stdout decision 字段控制；脚本仍应 exit 0 避免被误判",
+    "no_template_vars": "不支持 ${REPO_ROOT} 等模板变量，脚本从 stdin 的 workspacePaths 解析"
+  },
+  "design-to-code-anti-fabrication": {
+    "enabled": true,
+    "PreToolUse": [
+      {
+        "matcher": "write_to_file|replace_file_content|multi_replace_file_content",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .agents/scripts/dtc-hook.js",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "_scope_note": "本 hook 只管 ESLint 抓不到的：占位图URL + lorem ipsum。硬编码颜色/字号/z-index 交给项目 ESLint（eslint-plugin-design-tokens 之类），避免重复。若项目无 ESLint design-tokens 规则，可在 dtc-hook.js 的 scan() 里追加颜色/字号正则。"
+}

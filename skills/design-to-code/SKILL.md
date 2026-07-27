@@ -1,0 +1,91 @@
+---
+name: design-to-code
+description: 把 Figma 设计稿或 UI 截图还原成前端代码时使用。融合两条信息源——Figma MCP 导出的代码/样式（数值精确但常因设计不规范导致布局错乱）与视觉模型对截图的布局判断（结构正确但无精确像素），二者互补产出页码。当用户提到 Figma、设计稿、截图转代码、还原页面、figma MCP、视觉稿、UI 实现、设计还原、截图生成代码时触发，即使用户没明说"design-to-code"。解决两个高频痛点：MCP 代码样式准但布局乱、以及模型凭空捏造占位图/硬编码文案/臆造组件。
+---
+
+# Design-to-Code（Figma 草稿 + 截图视觉互补还原前端）
+
+## 这个 skill 解决什么
+
+把设计稿还原成前端代码时有两条信息源，各有硬伤：
+
+| 信息源 | 强项 | 硬伤 |
+|---|---|---|
+| Figma MCP 生成的代码 / Dev Mode 样式 | 数值精确（颜色/字号/边框/尺寸） | 设计不规范时布局结构错乱（flex 方向反、层级错、间距塌） |
+| 视觉模型看截图 | 布局结构、视觉分组、对齐关系判断准 | 无法给精确像素，密集小目标计数不可靠 |
+
+两条都不是单独可信的 ground truth。**主思路是 fusion：截图定结构与布局，MCP/Dev Mode 定每个精确数值**。再叠加一道 ground-truth lock 把"别捏造"从口头规则变成机械可校验。
+
+这条工作流已被 Figma 官方和 Framelink 社区验证为当前最佳实践（Framelink 内建 `get_node_screenshot`、官方指南要求"交付前与 Figma 1:1 校验"）。
+
+## 端到端主流程（7 步）
+
+1. **取源** — 用户提供截图和/或 Figma 链接。
+   - 有链接：先调 Figma MCP `get_metadata` / `get_design_context` 取节点树
+   - 只有截图：跳到第 3 步，并按需读 `references/fallback-bitmap-only.md`
+2. **导出 ground truth** — 调 MCP `get_variable_defs`（拿不到则用 REST API 兜底），落盘 `design-ground-truth.json`，每个值带出处 nodeId。详见 `references/ground-truth-lock.md`。
+3. **视觉读图** — 看截图，**只输出结构化布局描述**（父子嵌套、视觉分组、对齐、相对间距、层级关系），**不要给精确像素**——这是 MCP 的事。结构化描述示例见 `references/fusion-protocol.md`。
+4. **fusion 融合** — 按 `references/fusion-protocol.md` 处理冲突：结构与布局听截图，每个精确数值必须在 ground-truth.json 找到出处；冲突时结构优先、数值听 ground-truth。
+5. **生成代码** — 按目标框架落地。读对应 `references/framework-*.md`。强制只用 design-system registry 内的组件，registry 没有时显式声明并停下来问用户。
+6. **校验护栏** — 跑 `scripts/verify-ground-truth.js` 列未匹配值清单；对照 `references/anti-fabrication.md` 自查占位图/硬编码文案/臆造组件。
+7. **回环验证** — headless 渲染生成页 → 与截图视觉 diff → 不一致回到第 4 步。
+
+## 反捏造核心条款（详细版见 references/anti-fabrication.md）
+
+交付前代码必须通过这四条机械检查：
+
+- **占位图**：禁止 `placeholder.com` / `via.placeholder` / `placehold.co` / `picsum.photos` / `loremflickr` 等任何占位图服务。无真实资源时用 `<div>` + 注释 `<!-- TODO: replace with asset from <nodeId> -->`，并在交付说明里列出缺失资产清单。
+- **文案**：禁止任何不在截图/ground-truth 里出现的文案。不准编产品名、按钮文案、错误提示、版权年份。复制截图里出现的逐字文案。
+- **组件**：只能用 design-system registry 里列出的组件。registry 没有该组件时，用语义化原生标签（`<button>`/`<div>`+className）并在交付说明里标"待替换为 design-system XXX 组件"，**不要新造一个同名组件**。
+- **数值**：每个 color / font-size / border-radius / gap / z-index 值，要么在 ground-truth.json 有出处，要么显式标注"截图估读，待 Dev Mode 核实"。
+
+## references 索引（按需读取）
+
+主流程默认需要的两份先读，其余按场景：
+
+- **默认必读**：
+  - `references/fusion-protocol.md` — 截图 vs MCP 冲突时的取舍规则与结构化布局描述格式
+  - `references/anti-fabrication.md` — 反捏造清单完整版，含正反例
+- **有 Figma 链接时读**：
+  - `references/ground-truth-lock.md` — 如何导出 ground-truth.json、如何用它做机械校验
+- **按目标框架读其一**：
+  - `references/framework-react.md` — React + Tailwind / CSS Modules
+  - `references/framework-vue.md` — Vue 3 + `<script setup>`
+  - `references/framework-miniapp.md` — 微信/支付宝小程序
+- **纯位图无源文件时读**：
+  - `references/fallback-bitmap-only.md` — 用 Surya / PP-StructureV3 兜底版面识别
+
+## scripts/
+
+- `scripts/verify-ground-truth.js` — 零依赖 Node 脚本。用法：`node verify-ground-truth.js <code-dir> <ground-truth.json>`，扫描 .tsx/.jsx/.vue/.wxml/.css，输出未在 ground-truth.json 找到出处的颜色/字号/间距清单。
+
+## templates/（用于把这套规则装进不同工具）
+
+通用三件（ZCode / Claude Code / Cursor）：
+- `templates/agents-md-fragment.md` — 注入 `<repo>/AGENTS.md` 或 `~/.zcode/AGENTS.md`
+- `templates/claude-md-fragment.md` — 注入 `~/.claude/CLAUDE.md`
+- `templates/cursor-rule.mdc` — `.cursor/rules/design-to-code.mdc`
+- `templates/zcode-command.md` — ZCode 的 `/figma` slash command
+- `templates/ground-truth.schema.json` — `design-ground-truth.json` 的 JSON Schema
+- `templates/posttooluse-hook.json` — ZCode PostToolUse hook 配置示例（P3，本 skill 不自动启用）
+
+Antigravity 专属（首选适配）：
+- `templates/gemini-md-fragment.md` — 注入 `~/.gemini/GEMINI.md`（与已有的 "No hardcoded values" 协同）
+- `templates/antigravity-rule.md` — 复制到 `<repo>/.agents/rules/design-to-code.md`，激活模式设 `Always On`
+- `templates/antigravity-hooks.json` — 复制到 `<repo>/.agents/hooks.json`，配 PreToolUse 硬拦 + PostToolUse 反馈
+- `templates/antigravity-hook-script.js` — hooks.json 调用的零依赖 Node 脚本（已冒烟测试通过）
+- `templates/antigravity-plugin-structure.md` — 打成 Antigravity plugin 的目录结构与安装说明
+
+## 各工具装法速查
+
+- **Antigravity**（首选）：plugin 整包 clone 到 `~/.gemini/config/plugins/`（user 级）或 `<repo>/.agents/plugins/`（workspace 级）；Figma MCP 由用户自行在 `~/.gemini/config/mcp_config.json` 配置。详见 `templates/antigravity-*`
+- **ZCode**：skill 已在 `~/.agents/skills/` 可被发现；`zcode-command.md` 复制到 `~/.zcode/commands/figma.md` 作 `/figma`
+- **Claude Code**：skill 软链或复制到 `~/.claude/skills/`，`claude-md-fragment.md` 并入 `~/.claude/CLAUDE.md`
+- **Cursor**：`cursor-rule.mdc` 复制到 `<repo>/.cursor/rules/design-to-code.mdc`
+- **最小化**：只复制 `SKILL.md` + `references/anti-fabrication.md` 到任意项目，已能解决 80% 问题
+
+## 不做什么
+
+- 不包揽"截图直接生成代码"——本 skill 假定你有 Figma MCP 或至少有 Dev Mode 导出。纯截图场景走 `fallback-bitmap-only.md`。
+- 不替代 design-system——本 skill 强制调用现有 registry，不替你造组件库。
+- 不内建 Figma API 调用——MCP 工具调用由宿主 agent 负责，本 skill 只规定流程与约束。

@@ -1,0 +1,126 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "design-ground-truth",
+  "description": "Figma 导出的精确样式锁定文件，design-to-code skill 用它做反捏造机械校验。详见 references/ground-truth-lock.md",
+  "type": "object",
+  "required": ["source"],
+  "additionalProperties": false,
+  "properties": {
+    "source": {
+      "type": "object",
+      "required": ["via", "exported_at"],
+      "additionalProperties": false,
+      "properties": {
+        "figma_file": { "type": "string", "description": "Figma file key" },
+        "frame_node_id": { "type": "string", "description": "导出根 frame 的 nodeId" },
+        "exported_at": { "type": "string", "format": "date-time" },
+        "via": {
+          "type": "string",
+          "description": "导出方式：figma-mcp get_design_context / figma-mcp get_variable_defs / rest-api"
+        }
+      }
+    },
+    "tokens": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "colors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "value", "nodeId"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string", "description": "给代码引用的 token 别名，如 primary / text-on-primary" },
+              "value": { "type": "string", "pattern": "^#", "description": "hex 颜色，如 #3B82F6" },
+              "nodeId": { "type": "string" },
+              "path": { "type": "string", "description": "Figma 节点内路径，如 Button.fills[0].color" }
+            }
+          }
+        },
+        "typography": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "fontSize", "nodeId"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "fontSize": { "type": "number" },
+              "fontWeight": { "type": ["number", "string"] },
+              "fontFamily": { "type": "string" },
+              "lineHeight": { "type": ["number", "string"] },
+              "letterSpacing": { "type": ["number", "string"] },
+              "nodeId": { "type": "string" }
+            }
+          }
+        },
+        "spacing": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "value", "nodeId"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "value": { "type": "number" },
+              "nodeId": { "type": "string" },
+              "path": { "type": "string" }
+            }
+          }
+        },
+        "radius": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "value", "nodeId"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "value": { "type": "number" },
+              "nodeId": { "type": "string" },
+              "path": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "raw_styles": {
+      "type": "array",
+      "description": "原始节点样式，给 verify-ground-truth.js 做数值反查兜底",
+      "items": {
+        "type": "object",
+        "required": ["nodeId", "type"],
+        "additionalProperties": true,
+        "properties": {
+          "nodeId": { "type": "string" },
+          "type": { "type": "string", "description": "节点类型，如 FRAME / TEXT / BUTTON" },
+          "fills": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "type": { "type": "string" },
+                "color": { "type": "string" }
+              }
+            }
+          },
+          "strokes": { "type": "array" },
+          "effects": { "type": "array" },
+          "cornerRadius": { "type": "number" },
+          "itemSpacing": { "type": "number" },
+          "paddingTop": { "type": "number" },
+          "paddingRight": { "type": "number" },
+          "paddingBottom": { "type": "number" },
+          "paddingLeft": { "type": "number" },
+          "layoutMode": { "type": "string" },
+          "primaryAxisAlignItems": { "type": "string" },
+          "counterAxisAlignItems": { "type": "string" },
+          "fontSize": { "type": "number" },
+          "fontWeight": { "type": ["number", "string"] }
+        }
+      }
+    }
+  }
+}
