@@ -18,28 +18,40 @@ Antigravity IDE plugin：把 Figma 设计稿或 UI 截图还原成前端代码�
 ## 包含什么
 
 ```
-design-to-code-plugin/              plugin 根
-├── plugin.json                     manifest（仅 name 字段，Antigravity 官方规范）
+design-to-code-plugin/                   plugin 根
+├── plugin.json                          manifest（仅 name 字段，Antigravity 官方规范）
 ├── skills/
-│   └── design-to-code/             完整 skill（自包含）
-│       ├── SKILL.md                主入口：fusion 流程 + 触发条件 + 资源索引
-│       ├── references/             7 份细分规则
-│       │   ├── fusion-protocol.md     截图 vs MCP 冲突取舍规则
-│       │   ├── anti-fabrication.md    反捏造四红线完整版（正反例）
-│       │   ├── ground-truth-lock.md   如何导出 ground-truth.json + 机械校验
-│       │   ├── framework-react.md     React + Tailwind / CSS Modules
-│       │   ├── framework-vue.md       Vue 3 + <script setup>
-│       │   ├── framework-miniapp.md   微信/支付宝小程序
-│       │   └── fallback-bitmap-only.md 纯位图无源文件时的兜底
-│       └── scripts/
-│           └── verify-ground-truth.js  零依赖 Node 校验脚本
+│   └── design-to-code/                  完整 skill（自包含）
+│       ├── SKILL.md                     主入口：fusion 流程 + 触发条件 + 资源索引
+│       ├── references/                  7 份细分规则
+│       │   ├── fusion-protocol.md          截图 vs MCP 冲突取舍规则
+│       │   ├── anti-fabrication.md         反捏造四红线完整版（正反例）
+│       │   ├── ground-truth-lock.md        如何导出 ground-truth.json + 机械校验
+│       │   ├── framework-react.md          React + Tailwind / CSS Modules
+│       │   ├── framework-vue.md            Vue 3 + <script setup>
+│       │   ├── framework-miniapp.md        微信/支付宝小程序
+│       │   └── fallback-bitmap-only.md     纯位图无源文件时的兜底
+│       ├── scripts/
+│       │   └── verify-ground-truth.js      零依赖 Node 校验脚本
+│       └── templates/                   其他 IDE 的安装片段（跨工具复用）
+│           ├── agents-md-fragment.md       注入 AGENTS.md（ZCode 通用）
+│           ├── claude-md-fragment.md       注入 ~/.claude/CLAUDE.md
+│           ├── cursor-rule.mdc             .cursor/rules/design-to-code.mdc
+│           ├── zcode-command.md            ZCode /figma slash command
+│           ├── posttooluse-hook.json       ZCode PostToolUse hook 示例
+│           ├── gemini-md-fragment.md       注入 ~/.gemini/GEMINI.md（Antigravity 全局）
+│           ├── antigravity-rule.md         Antigravity workspace rule 模板
+│           ├── antigravity-hooks.json      Antigravity hooks 配置模板
+│           ├── antigravity-hook-script.js  对应 hook 脚本模板
+│           ├── antigravity-plugin-structure.md  打 plugin 的结构说明
+│           └── ground-truth.schema.json    ground-truth.json 的 JSON Schema
 ├── rules/
-│   └── design-to-code.md           workspace rule（设 Always On）
-├── hooks.json                      PreToolUse 自动护栏配置
+│   └── design-to-code.md                workspace rule（设 Always On）
+├── hooks.json                           PreToolUse 自动护栏配置（指向 scripts/dtc-hook.js）
 ├── scripts/
-│   └── dtc-hook.js                 护栏脚本（占位图 URL + lorem ipsum）
-├── KIT-README.md                   skill kit 的完整说明（含 ZCode/Claude Code/Cursor 装法）
-└── README.md                       本文件
+│   ├── dtc-hook.js                      护栏脚本（占位图 URL + lorem ipsum）
+│   └── selfcheck.js                     自检脚本（一键验证 11 项链路）
+└── README.md                            本文件
 ```
 
 ## 安装
@@ -65,6 +77,16 @@ skill 部分可独立使用，复制 `skills/design-to-code/` 到任意 skill �
 
 ## 验证安装
 
+### 一键自检（推荐）
+
+```bash
+node <plugin-path>/scripts/selfcheck.js
+```
+
+跑完 11 项检查（文件完整性 / Node / Antigravity 环境 / Figma MCP / hook / verify 三态），全绿即整条链路通。有失败项会附修复提示。
+
+### 手动验证（可选，自检不够时用）
+
 ```bash
 # 1. 验证 hook 护栏：模拟写 picsum URL，应被 ask 拦截
 node -e 'const fs=require("fs"); fs.writeFileSync("/tmp/dtc.json", JSON.stringify({toolCall:{name:"write_to_file",args:{TargetFile:"/tmp/Card.tsx",CodeContent:"<img src=\"https://picsum.photos/40\" />"}}}))'
@@ -76,7 +98,7 @@ rm -f /tmp/dtc.json
 node <plugin-path>/skills/design-to-code/scripts/verify-ground-truth.js <code-dir> design-ground-truth.json
 ```
 
-完整验证步骤见 `KIT-README.md`。
+> 注：自检和手动验证只能确认**脚本层和环境配置**正确。Antigravity IDE 运行时是否真的加载 plugin / 接入 hook，需重启 IDE 后实写一次含 picsum URL 的代码看是否弹 ask 确认。
 
 ## Figma MCP
 
