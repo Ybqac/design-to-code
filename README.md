@@ -13,7 +13,7 @@ Antigravity IDE plugin：把 Figma 设计稿或 UI 截图还原成前端代码�
 | 视觉模型看用户截图 | 布局结构准 | 无精确像素 | ✅ 用户给 |
 | f2c `get_code_to_component` | 一键出代码 + 自动下素材 | 布局常混乱（不看截图、不读 ground-truth），模型偷懒直接用+编造修复汇报 | ❌ 已禁用 |
 
-本 plugin 用 **fusion**（截图定结构、Framelink 数据定数值、模型自己生成代码）+ **ground-truth lock**（反捏造机械校验）+ **两阶段强制确认闸口**（4a 输出结构描述给用户确认、4b 确认后才生成代码）解决三个高频痛点：MCP 数据准但布局乱、模型凭空捏造占位图/硬编码文案/臆造组件、模型偷懒直接用 f2c 输出并编造"已按截图修复"的幻觉汇报。
+本 plugin 用 **fusion**（截图定结构、Framelink 数据定数值、模型自己生成代码）解决布局与数值的矛盾。`design-ground-truth.json` 从 Figma 取精确节点样式，**主用途是给模型生成代码时查值**（bg/border/字号/圆角/阴影都从这里取，不靠截图猜），**次用途是校验凭证**（verify 脚本事后反查抓没查 ground-truth 凭空写的值）。ground-truth 只服务反捏造四红线里的第四条（禁凭空数值），其余三条由 `download_figma_images`（禁占位图）、截图逐字复制（禁凭空文案）、design-system registry（禁新造组件）分别承载。另叠加 **两阶段强制确认闸口**（4a 输出结构描述给用户确认、4b 确认后才生成代码）防止模型偷懒直接用 f2c 输出并编造幻觉汇报。解决三个高频痛点：MCP 数据准但布局乱、模型凭空捏造占位图/硬编码文案/臆造组件、模型偷懒直接用 f2c 输出并编造"已按截图修复"的幻觉汇报。
 
 这套做法与 Figma 官方 MCP 指南的建议方向一致（指南推荐"标记完成前与 Figma 1:1 校验"），并落地了 Framelink 的 `get_figma_data` + `download_figma_images` 两个工具。Fusion + ground-truth 回锁 + 两阶段确认闸口是本项目的设计，社区未找到完整对标项目。
 
