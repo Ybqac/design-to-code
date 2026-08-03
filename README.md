@@ -10,8 +10,11 @@ Antigravity IDE plugin：把 Figma 设计稿或 UI 截图还原成前端代码�
 |---|---|---|
 | Framelink `get_figma_data` | 数值精确（颜色/字号/边框/尺寸） | 设计不规范时布局结构错乱 |
 | 视觉模型看用户截图 | 布局结构准 | 无精确像素 |
+| f2c `get_code_to_component` | 一键出代码 + 自动下素材 | 布局常混乱，输出诱导模型跳过 fusion |
 
-两条都不是单独可信的 ground truth。本 plugin 用 **fusion**（截图定结构、MCP 定数值）+ **ground-truth lock**（把反捏造从口头规则变成机械校验）解决两个高频痛点：MCP 数值准但布局乱、模型凭空捏造占位图/硬编码文案/臆造组件。
+三条信息源各自有硬伤。本 plugin 用 **fusion**（截图定结构、Framelink 数据定数值、模型自己生成代码）+ **ground-truth lock**（反捏造机械校验）解决两个高频痛点：MCP 数据准但布局乱、模型凭空捏造占位图/硬编码文案/臆造组件。
+
+**重要：f2c 的代码输出默认不进主流程**——实测证明把 f2c 草稿当最终结果会导致布局混乱（f2c 不看截图、不读 ground-truth，只按 Figma 原始节点树出码）。主流程要求模型基于 fusion 结果自己生成代码；f2c 仅作可选参考或用其素材下载副作用。
 
 这套做法与 Figma 官方 MCP 指南的建议方向一致（指南推荐"标记完成前与 Figma 1:1 校验"），并落地了 Framelink 的 `get_figma_data` + `download_figma_images` 两个工具。Fusion + ground-truth 回锁这一融合机制是本项目的设计，社区未找到完整对标项目。
 
@@ -135,6 +138,7 @@ node <plugin-path>/skills/design-to-code/scripts/verify-ground-truth.js <code-di
 - 禁凭空文案（只复制截图可见的逐字内容）
 - 禁新造 design-system 之外的同名组件
 - 禁凭空精确数值（每值在 ground-truth.json 有出处或显式标"截图估读"）
+- **禁直接用 f2c 输出当最终代码**（f2c 草稿必须经过 fusion 重写——读截图→重写布局→对齐 ground-truth）
 
 ## 设计依据
 
