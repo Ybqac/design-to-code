@@ -97,26 +97,69 @@ function checkAntigravityEnv() {
 }
 
 // ---------- 4. Figma MCP 配置 ----------
+// 检查所有可能的 mcp_config.json 路径——Antigravity 有多个配置目录，
+// IDE 读的未必是 config/ 那份。任一不一致就报警，防止"自检通过但 IDE 读错文件"。
+const MCP_PATHS = [
+  path.join(GEMINI_DIR, 'config', 'mcp_config.json'),           // 标准 user 级
+  path.join(GEMINI_DIR, 'antigravity-ide', 'mcp_config.json'),  // IDE 专属
+  path.join(GEMINI_DIR, 'antigravity', 'mcp_config.json'),      // 2.0 桌面端
+];
+
 function checkMcp() {
-  if (!fs.existsSync(MCP_CONFIG)) {
-    check('4. Figma MCP 配置', false, `${MCP_CONFIG} 不存在`);
-    return;
+  // 4a. 所有已知路径都必须有 Framelink
+  const pathResults = MCP_PATHS.map(p => {
+    if (!fs.existsSync(p)) return { path: p, exists: false, servers: [], hasFramelink: false, hasF2c: false };
+    try {
+      const cfg = JSON.parse(fs.readFileSync(p, 'utf8'));
+      const servers = Object.keys(cfg.mcpServers || {});
+      return {
+        path: p, exists: true, servers,
+        hasFramelink: servers.some(s => /framelink/i.test(s)),
+        hasF2c: servers.some(s => /f2c/i.test(s)),
+      };
+    } catch (e) {
+      return { path: p, exists: true, parseError: e.message, servers: [], hasFramelink: false, hasF2c: false };
+    }
+  });
+
+  const allHaveFramelink = pathResults.every(r => r.hasFramelink);
+  const anyHasF2c = pathResults.some(r => r.hasF2c);
+  const shortPath = (p) => p.replace(HOME, '~');
+
+  check('4a. Framelink MCP 在所有配置路径中就位', allHaveFramelink,
+    allHaveFramelink
+      ? `所有 ${pathResults.length} 个路径都有 Framelink`
+      : '部分路径缺 Framelink:\n' + pathResults.filter(r => !r.hasFramelink).map(r => `    ${shortPath(r.path)} → ${r.exists ? (r.servers.join(',') || '(空)') : '(文件不存在)'}`).join('\n'));
+
+  // 4b. 所有路径都不应该有 f2c
+  const f2cPaths = pathResults.filter(r => r.hasF2c);
+  check('4b. f2c MCP 已从所有路径移除', f2cPaths.length === 0,
+    f2cPaths.length === 0
+      ? '所有路径均无 f2c（主流程防偷懒）'
+      : '⚠️ 以下路径仍有 f2c（IDE 可能读到这些）:\n' + f2cPaths.map(r => `    ${shortPath(r.path)}`).join('\n'));
+
+  // 4c. 实测 Framelink server 能否启动（warning，不阻断 exit code）
+  // 这步能抓出"配置在但 npx 包拉不起来"的问题。
+  // 注意：用 execFileSync + input 喂 stdin 的方式在 fake token 下不稳定
+  // (initialize 响应可能不返回)，所以只作 warning。真正验证 Framelink 调通的方式
+  // 是重启 Antigravity 让它加载已配的 server，然后实测调 get_figma_data。
+  try {
+    let combined = '';
+    try {
+      const out = execFileSync('npx', ['-y', 'figma-developer-mcp', '--figma-api-key=fake', '--stdio'], {
+        input: '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"sc","version":"1"}}}',
+        encoding: 'utf8', timeout: 15000, stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      combined = out;
+    } catch (e) { combined = (e.stdout || '') + (e.stderr || ''); }
+    const hasBoot = /Figma MCP Server/.test(combined);
+    // warning 级别：用第二参数 true 让它算通过，但 detail 里提示"建议 IDE 实测"
+    check('4c. Framelink server 能启动 (warning)', true,
+      hasBoot ? 'server boot 成功（initialize 响应含 Figma MCP Server）'
+              : 'selfcheck 内 boot 检测不稳定（fake token 下 initialize 可能不响应）。建议重启 Antigravity 后实测调 get_figma_data 验证');
+  } catch (e) {
+    check('4c. Framelink server 能启动 (warning)', true, `selfcheck 内 boot 检测异常，建议重启 Antigravity 实测: ${e.message.slice(0,80)}`);
   }
-  let cfg;
-  try { cfg = JSON.parse(fs.readFileSync(MCP_CONFIG, 'utf8')); }
-  catch (e) { check('4. Figma MCP 配置', false, `解析失败: ${e.message}`); return; }
-  const servers = Object.keys(cfg.mcpServers || {});
-  const hasFramelink = servers.some(s => /framelink/i.test(s));
-  const hasF2c = servers.some(s => /f2c/i.test(s));
-  const backupExists = fs.existsSync(path.join(CONFIG_DIR, 'mcp_config.json.f2c-backup'));
-
-  // 4a. Framelink 必须在位
-  check('4a. Framelink MCP 在位', hasFramelink,
-    hasFramelink ? `Framelink 已配 (${servers.filter(s=>/framelink/i.test(s)).join(', ')})` : '未找到 Framelink MCP——需配置 figma-developer-mcp');
-
-  // 4b. f2c 必须已禁用（主流程防偷懒）
-  check('4b. f2c MCP 已禁用', !hasF2c,
-    !hasF2c ? 'f2c 已从 mcp_config.json 移除（主流程防偷懒）' + (backupExists ? '，备份在 mcp_config.json.f2c-backup' : '') : '⚠️ f2c 仍在配置中——实测证明模型会偷懒直接用 f2c 输出，建议移除（备份后）');
 }
 
 // ---------- 5. hook 脚本 ----------
