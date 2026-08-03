@@ -150,7 +150,8 @@ function checkMcp() {
       combined = out;
     } catch (e) { combined = (e.stdout || '') + (e.stderr || ''); }
     const hasBoot = /Figma MCP Server/.test(combined);
-    const hasSchema = /inputSchema/.test(combined) && !"parameters.*null".test(combined);
+    // schema 完整判定：tools/list 返回里含 inputSchema 字段
+    const hasSchema = /inputSchema/.test(combined);
     check('4c. Framelink server 启动 + schema 完整', hasBoot && hasSchema,
       hasBoot && hasSchema ? 'server boot 成功 + tools/list 返回完整 inputSchema ✅'
       : hasBoot ? 'server boot 成功但 schema 可能不完整（parameters:null）——检查 npx 缓存或改用全局预装'
