@@ -11,22 +11,23 @@ description: 把 Figma 设计稿或 UI 截图还原成前端代码时使用。�
 
 | 信息源 | 强项 | 硬伤 |
 |---|---|---|
-| Figma MCP 生成的代码 / Dev Mode 样式 | 数值精确（颜色/字号/边框/尺寸） | 设计不规范时布局结构错乱（flex 方向反、层级错、间距塌） |
+| Figma MCP 取的节点数据（`get_figma_data`） | 数值精确（颜色/字号/边框/尺寸） | 设计不规范时布局结构错乱（flex 方向反、层级错、间距塌） |
 | 视觉模型看截图 | 布局结构、视觉分组、对齐关系判断准 | 无法给精确像素，密集小目标计数不可靠 |
 
-两条都不是单独可信的 ground truth。**主思路是 fusion：截图定结构与布局，MCP/Dev Mode 定每个精确数值**。再叠加一道 ground-truth lock 把"别捏造"从口头规则变成机械可校验。
+两条都不是单独可信的 ground truth。**主思路是 fusion：截图定结构与布局，MCP 取的精确数值定 ground-truth**。再叠加一道 ground-truth lock 把"别捏造"从口头规则变成机械可校验。
 
-这条工作流已被 Figma 官方和 Framelink 社区验证为当前最佳实践（Framelink 内建 `get_node_screenshot`、官方指南要求"交付前与 Figma 1:1 校验"）。
+这套做法与 Figma 官方 MCP 指南的建议方向一致（指南推荐"标记完成前与 Figma 1:1 校验"），并落地了 Framelink 的 `get_figma_data` + `download_figma_images` 两个工具。Fusion + ground-truth 回锁这一融合机制是本项目的设计，未在社区找到完整对标项目。
 
 ## 端到端主流程（7 步）
 
-1. **取源** — 用户提供截图和/或 Figma 链接。
-   - 有链接：先调 Figma MCP `get_metadata` / `get_design_context` 取节点树
-   - 只有截图：跳到第 3 步，并按需读 `references/fallback-bitmap-only.md`
-2. **导出 ground truth** — 调 MCP `get_variable_defs`（拿不到则用 REST API 兜底），落盘 `design-ground-truth.json`，每个值带出处 nodeId。详见 `references/ground-truth-lock.md`。
+1. **取源** — 用户提供截图 + Figma 链接（**截图由用户给，模型不自己调 MCP 取截图**——Framelink v0.13.2 不提供 screenshot 工具）。
+   - 调 Framelink 的 `get_figma_data(fileKey, nodeId)` 取节点树（layout/styling/content/component 信息）
+   - 从 URL 提取 fileKey（`figma.com/(file|design)/<fileKey>/...`）和 nodeId（`?node-id=<nodeId>`，把 `-` 改成 `:`）
+   - 只有截图没链接：跳到第 3 步，并按需读 `references/fallback-bitmap-only.md`
+2. **导出 ground truth** — 把 `get_figma_data` 返回的节点数据**整理成** `design-ground-truth.json`（tokens + raw_styles，每个值带出处 nodeId）。`get_figma_data` 给的是简化后的结构化数据，无需再调 `get_variable_defs`（那是 Figma 官方 MCP 的工具，Framelink 没有同名工具）。详见 `references/ground-truth-lock.md`。
 3. **视觉读图** — 看截图，**只输出结构化布局描述**（父子嵌套、视觉分组、对齐、相对间距、层级关系），**不要给精确像素**——这是 MCP 的事。结构化描述示例见 `references/fusion-protocol.md`。
-4. **fusion 融合** — 按 `references/fusion-protocol.md` 处理冲突：结构与布局听截图，每个精确数值必须在 ground-truth.json 找到出处；冲突时结构优先、数值听 ground-truth。
-5. **生成代码** — 按目标框架落地。读对应 `references/framework-*.md`。强制只用 design-system registry 内的组件，registry 没有时显式声明并停下来问用户。
+4. **fusion 融合** — 按 `references/fusion-protocol.md` 处理冲突：结构与布局听截图，每个精确数值优先从 ground-truth.json 取值（注释 `/* from nodeId */`）；不在 ground-truth 的才标"截图估读"。冲突时结构优先。
+5. **生成代码 + 下载真实素材** — 按目标框架落地（读对应 `references/framework-*.md`）。强制只用 design-system registry 内的组件。**截图里看到的图标/图片一律调 `download_figma_images(fileKey, nodes, localPath)` 下真实素材，不要用 picsum/placeholder**——这是反捏造红线 #1 的正解。素材下到项目内约定目录（如 `public/figma-assets/`）或全局缓存目录。
 6. **校验护栏** — 跑 `scripts/verify-ground-truth.js` 列未匹配值清单；对照 `references/anti-fabrication.md` 自查占位图/硬编码文案/臆造组件。
 7. **回环验证** — headless 渲染生成页 → 与截图视觉 diff → 不一致回到第 4 步。
 
@@ -34,7 +35,7 @@ description: 把 Figma 设计稿或 UI 截图还原成前端代码时使用。�
 
 交付前代码必须通过这四条机械检查：
 
-- **占位图**：禁止 `placeholder.com` / `via.placeholder` / `placehold.co` / `picsum.photos` / `loremflickr` 等任何占位图服务。无真实资源时用 `<div>` + 注释 `<!-- TODO: replace with asset from <nodeId> -->`，并在交付说明里列出缺失资产清单。
+- **占位图**：禁止 `placeholder.com` / `via.placeholder` / `placehold.co` / `picsum.photos` / `loremflickr` 等任何占位图服务。**正解是调 `download_figma_images` 下 Figma 真实素材**；实在下不到时用 `<div>` + 注释 `<!-- TODO: replace with asset from <nodeId> -->`，并在交付说明里列出缺失资产清单。
 - **文案**：禁止任何不在截图/ground-truth 里出现的文案。不准编产品名、按钮文案、错误提示、版权年份。复制截图里出现的逐字文案。
 - **组件**：只能用 design-system registry 里列出的组件。registry 没有该组件时，用语义化原生标签（`<button>`/`<div>`+className）并在交付说明里标"待替换为 design-system XXX 组件"，**不要新造一个同名组件**。
 - **数值**：每个 color / font-size / border-radius / gap / z-index 值，要么在 ground-truth.json 有出处，要么显式标注"截图估读，待 Dev Mode 核实"。

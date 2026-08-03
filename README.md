@@ -2,18 +2,18 @@
 
 Antigravity IDE plugin：把 Figma 设计稿或 UI 截图还原成前端代码的工作约束包。
 
-融合两条信息源——Figma MCP 代码（数值精确）与截图视觉（结构准确），含反捏造四红线护栏。
+融合两条信息源——Framelink MCP 取的节点数据（`get_figma_data`，数值精确）与用户截图（结构准确），含反捏造四红线护栏。
 
 ## 解决什么问题
 
 | 信息源 | 强项 | 硬伤 |
 |---|---|---|
-| Figma MCP 代码 / Dev Mode 样式 | 数值精确 | 设计不规范时布局结构错乱 |
-| 视觉模型看截图 | 布局结构准 | 无精确像素 |
+| Framelink `get_figma_data` | 数值精确（颜色/字号/边框/尺寸） | 设计不规范时布局结构错乱 |
+| 视觉模型看用户截图 | 布局结构准 | 无精确像素 |
 
-两条都不是单独可信的 ground truth。本 plugin 用 **fusion**（截图定结构、MCP 定数值）+ **ground-truth lock**（把反捏造从口头规则变成机械校验）解决两个高频痛点：MCP 代码样式准但布局乱、模型凭空捏造占位图/硬编码文案/臆造组件。
+两条都不是单独可信的 ground truth。本 plugin 用 **fusion**（截图定结构、MCP 定数值）+ **ground-truth lock**（把反捏造从口头规则变成机械校验）解决两个高频痛点：MCP 数值准但布局乱、模型凭空捏造占位图/硬编码文案/臆造组件。
 
-已被 Figma 官方和 Framelink 社区验证为最佳实践（Framelink 内建 `get_node_screenshot`、官方指南要求"交付前与 Figma 1:1 校验"）。
+这套做法与 Figma 官方 MCP 指南的建议方向一致（指南推荐"标记完成前与 Figma 1:1 校验"），并落地了 Framelink 的 `get_figma_data` + `download_figma_images` 两个工具。Fusion + ground-truth 回锁这一融合机制是本项目的设计，社区未找到完整对标项目。
 
 ## 包含什么
 
@@ -122,7 +122,7 @@ node <plugin-path>/skills/design-to-code/scripts/verify-ground-truth.js <code-di
 | 维度 | 项目既有（如 ESLint design-tokens） | 本 plugin |
 |---|---|---|
 | 硬编码颜色/字号/z-index | 交项目 ESLint | 不重复 |
-| 占位图 URL | 通常无 | PreToolUse hook 硬拦 ✓ |
+| 占位图 URL / picsum | 通常无 | PreToolUse hook 硬拦 ✓ + `download_figma_images` 下真图替代 |
 | lorem ipsum | 通常无 | PreToolUse hook 硬拦 ✓ |
 | 凭空造组件 | 通常无 | rule 约束 registry |
 | ground-truth 出处核对 | 通常无 | verify-ground-truth.js |
@@ -131,17 +131,15 @@ node <plugin-path>/skills/design-to-code/scripts/verify-ground-truth.js <code-di
 
 ## 反捏造四红线（速记）
 
-- 禁占位图 URL（placeholder/picsum/unsplash 等）
+- 禁占位图 URL（placeholder/picsum/unsplash 等）——正解是调 Framelink `download_figma_images` 下真实素材
 - 禁凭空文案（只复制截图可见的逐字内容）
 - 禁新造 design-system 之外的同名组件
 - 禁凭空精确数值（每值在 ground-truth.json 有出处或显式标"截图估读"）
 
 ## 设计依据
 
-- Framelink issue tracker 同类问题证据：#232（flex 交叉轴方向反）、#390（填色层叠顺序错）、#368（跨文件图片合并→模型瞎编占位）、#279（官方内建 `get_node_screenshot`）
-- Figma 官方 MCP 指南："先截图，交付前与 Figma 1:1 校验"
-- 多模态大模型 UI 截图理解强在整体语义、弱在密集小目标与精确像素，故精确数值交 MCP、结构交截图视觉
-
-## License
-
-MIT（见 [LICENSE](LICENSE)）
+- **Framelink**（`figma-developer-mcp` v0.13.2）：实际暴露 2 个工具——`get_figma_data`（取节点树 layout/styling/content/component，作为 ground-truth 数值来源）和 `download_figma_images`（下真实素材，根治占位图）。**注意：v0.13.2 不含 `get_node_screenshot`**——截图需由用户提供
+- **Figma 官方 MCP 指南**："标记完成前与 Figma 1:1 校验"是官方文档的推荐做法，不是强制要求
+- **Framelink issue tracker 同类问题证据**：#232（flex 交叉轴方向反）、#390（填色层叠顺序错）、#368（跨文件图片合并→模型瞎编占位）
+- **多模态大模型特性**：UI 截图理解强在整体语义、弱在密集小目标与精确像素——故精确数值交 MCP `get_figma_data`、结构交用户截图视觉融合
+- **融合机制**：把 MCP 精确数值与截图视觉判断显式融合成统一信号源，是本 plugin 的设计选择，社区未找到完整对标项目

@@ -6,14 +6,19 @@
 
 ## 如何导出 design-ground-truth.json
 
-优先用 Figma MCP，REST API 兜底：
+用 Framelink MCP 的 `get_figma_data` 工具取数据，REST API 兜底：
 
 ```
-1. MCP：调 get_variable_defs(nodeId) → 拿 design tokens（color / spacing / typography）
-2. MCP：调 get_design_context(nodeId) → 拿节点样式摘要
-3. 兜底 REST API：GET https://api.figma.com/v1/files/<file_key>/nodes?ids=<nodeIds>
+1. Framelink MCP：调 get_figma_data(fileKey, nodeId) → 拿节点树 layout/styling/content/component
+   - fileKey 从 URL 提取：figma.com/(file|design)/<fileKey>/...
+   - nodeId 从 URL 参数提取：?node-id=12-345 → 改成 12:345（破折号换冒号）
+   - 返回的 JSON 已被 Framelink 简化为模型友好的结构（含 fills/strokes/layout/typography/content）
+2. 兜底 REST API：GET https://api.figma.com/v1/files/<file_key>/nodes?ids=<nodeIds>
    → 遍历 nodes[].document，把 fills/strokes/effects/layoutGeometry 抽出来
+   （当 Framelink 不可用、或返回被截断时用）
 ```
+
+**注意工具名**：Framelink v0.13.2 只暴露 `get_figma_data` 和 `download_figma_images` 两个工具——**没有 `get_variable_defs` / `get_design_context` / `get_node_screenshot`**（那些是 Figma 官方 MCP 的工具名，不要写错）。
 
 导出后落盘项目根 `design-ground-truth.json`，schema 见 `templates/ground-truth.schema.json`。样例：
 
@@ -23,7 +28,7 @@
     "figma_file": "abc123",
     "frame_node_id": "12:345",
     "exported_at": "2026-07-27T10:00:00Z",
-    "via": "figma-mcp get_design_context"
+    "via": "framelink get_figma_data"
   },
   "tokens": {
     "colors": [
@@ -82,6 +87,7 @@ node scripts/verify-ground-truth.js <code-dir> <ground-truth.json>
 
 按可获取程度降级：
 
-1. MCP 能调 `get_design_context` 但截断 → 拆小 frame 一段段取，合并落盘
-2. MCP 只能拿 `get_metadata`（节点结构无样式） → 落节点树结构作 ground-truth，样式部分全部走"截图估读"，verify 脚本只校验结构
-3. 完全没有 Figma 源文件 → 读 `references/fallback-bitmap-only.md` 走位图兜底
+1. Framelink 的 `get_figma_data` 返回截断 → 用 `depth` 参数控制深度，或拆小 frame 一段段取，合并落盘
+2. Framelink 拿到的数据缺关键字段 → 兜底走 Figma REST API（`GET /files/<key>/nodes?ids=...`）取原始 JSON
+3. 用户给的 Figma 链接无法访问（权限/token 失效） → 告诉用户截图+链接都需要，落空 ground-truth.json，按 `references/fallback-bitmap-only.md` 走位图兜底
+
