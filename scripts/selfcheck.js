@@ -131,27 +131,30 @@ function checkMcp() {
       ? `所有 ${pathResults.length} 个路径都有 Framelink`
       : '部分路径缺 Framelink:\n' + pathResults.filter(r => !r.hasFramelink).map(r => `    ${shortPath(r.path)} → ${r.exists ? (r.servers.join(',') || '(空)') : '(文件不存在)'}`).join('\n'));
 
-  // 4b. 所有路径都不应该有 f2c
-  const f2cPaths = pathResults.filter(r => r.hasF2c);
-  check('4b. f2c MCP 已从所有路径移除', f2cPaths.length === 0,
-    f2cPaths.length === 0
-      ? '所有路径均无 f2c（主流程防偷懒）'
-      : '⚠️ 以下路径仍有 f2c（IDE 可能读到这些）:\n' + f2cPaths.map(r => `    ${shortPath(r.path)}`).join('\n'));
+  // 4b 已移除——f2c 现在重新启用（绕开 Figma REST 限流）。f2c 检测合并到 4c。
 
-  // 4c. 检测 figma-developer-mcp 命令是否全局可用
-  // 不模拟 MCP 协议握手（execFileSync 一行喂多消息不等响应，不可靠）。
-  // 只验命令在 PATH 中，schema 完整性留给用户重启 IDE 实测。
+
+  // 4c. 检测 figma-developer-mcp 命令是否全局可用（用于 Framelink）
+  // 同时检测 f2c-mcp 是否在配置里（已恢复，绕开 Figma REST 限流）
+  let framelinkCmd = null;
   try {
-    const out = execFileSync('which', ['figma-developer-mcp'], {
+    framelinkCmd = execFileSync('which', ['figma-developer-mcp'], {
       encoding: 'utf8', timeout: 3000,
     }).trim();
-    check('4c. figma-developer-mcp 命令全局可用', !!out,
-      out ? `✅ 在 PATH: ${out}（IDE 启动时直接调用，不经 npx 下载）`
-          : '命令未找到——运行 npm install -g figma-developer-mcp 后重试');
-  } catch (e) {
-    check('4c. figma-developer-mcp 命令全局可用', false,
-      '命令未找到——运行 npm install -g figma-developer-mcp 后重试。已装但找不到则检查 PATH');
-  }
+  } catch (e) { framelinkCmd = null; }
+
+  // f2c-mcp 检测（看任意一个 mcp_config 路径里有没有）
+  const f2cPresent = MCP_PATHS.some(p => {
+    try {
+      const cfg = JSON.parse(fs.readFileSync(p, 'utf8'));
+      return Object.keys(cfg.mcpServers || {}).some(s => /f2c/i.test(s));
+    } catch { return false; }
+  });
+
+  check('4c. Framelink 命令可用 + f2c 在配置中', !!framelinkCmd && f2cPresent,
+    (!framelinkCmd ? '⚠️ figma-developer-mcp 命令未全局安装（npm install -g figma-developer-mcp）；' : '✅ figma-developer-mcp 在 PATH；')
+    + (!f2cPresent ? '⚠️ f2c-mcp 未配置（绕开 Figma REST 限流需要它）；' : '✅ f2c-mcp 已配置（绕开限流）。')
+    + (framelinkCmd && f2cPresent ? '双 MCP 就位' : ''));
 }
 
 // ---------- 5. hook 脚本 ----------
