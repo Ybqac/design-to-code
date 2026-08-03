@@ -14,7 +14,7 @@ description: 把 Figma 设计稿或 UI 截图还原成前端代码时使用。�
 | Figma MCP 取的节点数据（`get_figma_data`） | 数值精确（颜色/字号/边框/尺寸） | 设计不规范时布局结构错乱（flex 方向反、层级错、间距塌） |
 | 视觉模型看截图 | 布局结构、视觉分组、对齐关系判断准 | 无法给精确像素，密集小目标计数不可靠 |
 
-两条都不是单独可信的 ground truth。**主思路是 fusion：截图定结构与布局，MCP 取的精确数值定 ground-truth**。再叠加一道 ground-truth lock 把"别捏造"从口头规则变成机械可校验。
+两条都不是单独可信的 ground truth。**主思路是 fusion：截图定结构与布局，MCP 取的精确数值定 ground-truth**。`design-ground-truth.json` 的**主用途是给模型生成代码时查值**——每个节点的背景/边框/字号/圆角/阴影都从这里取，不靠截图猜。**次用途是校验凭证**——生成完后 verify 脚本反查这份文件，抓"模型没查就凭空写的值"。ground-truth 只服务反捏造四红线里的第四条（禁凭空数值），不是反捏造的全部载体。
 
 这套做法与 Figma 官方 MCP 指南的建议方向一致（指南推荐"标记完成前与 Figma 1:1 校验"），并落地了 Framelink 的 `get_figma_data` + `download_figma_images` 两个工具。Fusion + ground-truth 回锁这一融合机制是本项目的设计，未在社区找到完整对标项目。
 
