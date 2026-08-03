@@ -138,27 +138,25 @@ function checkMcp() {
       ? '所有路径均无 f2c（主流程防偷懒）'
       : '⚠️ 以下路径仍有 f2c（IDE 可能读到这些）:\n' + f2cPaths.map(r => `    ${shortPath(r.path)}`).join('\n'));
 
-  // 4c. 实测 Framelink server 能否启动（warning，不阻断 exit code）
-  // 这步能抓出"配置在但 npx 包拉不起来"的问题。
-  // 注意：用 execFileSync + input 喂 stdin 的方式在 fake token 下不稳定
-  // (initialize 响应可能不返回)，所以只作 warning。真正验证 Framelink 调通的方式
-  // 是重启 Antigravity 让它加载已配的 server，然后实测调 get_figma_data。
+  // 4c. 实测 Framelink server 能否启动 + schema 是否完整
+  // 用直接命令（非 npx），预装后启动快。检测 initialize 响应 + tools/list 的 inputSchema 是否非 null
   try {
     let combined = '';
     try {
-      const out = execFileSync('npx', ['-y', 'figma-developer-mcp', '--figma-api-key=fake', '--stdio'], {
-        input: '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"sc","version":"1"}}}',
-        encoding: 'utf8', timeout: 15000, stdio: ['pipe', 'pipe', 'pipe'],
+      const out = execFileSync('figma-developer-mcp', ['--figma-api-key=fake', '--stdio'], {
+        input: '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"sc","version":"1"}}}\n{"jsonrpc":"2.0","method":"notifications/initialized"}\n{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}',
+        encoding: 'utf8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'],
       });
       combined = out;
     } catch (e) { combined = (e.stdout || '') + (e.stderr || ''); }
     const hasBoot = /Figma MCP Server/.test(combined);
-    // warning 级别：用第二参数 true 让它算通过，但 detail 里提示"建议 IDE 实测"
-    check('4c. Framelink server 能启动 (warning)', true,
-      hasBoot ? 'server boot 成功（initialize 响应含 Figma MCP Server）'
-              : 'selfcheck 内 boot 检测不稳定（fake token 下 initialize 可能不响应）。建议重启 Antigravity 后实测调 get_figma_data 验证');
+    const hasSchema = /inputSchema/.test(combined) && !"parameters.*null".test(combined);
+    check('4c. Framelink server 启动 + schema 完整', hasBoot && hasSchema,
+      hasBoot && hasSchema ? 'server boot 成功 + tools/list 返回完整 inputSchema ✅'
+      : hasBoot ? 'server boot 成功但 schema 可能不完整（parameters:null）——检查 npx 缓存或改用全局预装'
+                : 'server 未启动——确认 figma-developer-mcp 已全局安装: npm install -g figma-developer-mcp');
   } catch (e) {
-    check('4c. Framelink server 能启动 (warning)', true, `selfcheck 内 boot 检测异常，建议重启 Antigravity 实测: ${e.message.slice(0,80)}`);
+    check('4c. Framelink server 启动 + schema 完整', false, `启动失败: ${e.message.slice(0,80)}。确认已 npm install -g figma-developer-mcp`);
   }
 }
 
