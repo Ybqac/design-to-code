@@ -138,26 +138,19 @@ function checkMcp() {
       ? '所有路径均无 f2c（主流程防偷懒）'
       : '⚠️ 以下路径仍有 f2c（IDE 可能读到这些）:\n' + f2cPaths.map(r => `    ${shortPath(r.path)}`).join('\n'));
 
-  // 4c. 实测 Framelink server 能否启动 + schema 是否完整
-  // 用直接命令（非 npx），预装后启动快。检测 initialize 响应 + tools/list 的 inputSchema 是否非 null
+  // 4c. 检测 figma-developer-mcp 命令是否全局可用
+  // 不模拟 MCP 协议握手（execFileSync 一行喂多消息不等响应，不可靠）。
+  // 只验命令在 PATH 中，schema 完整性留给用户重启 IDE 实测。
   try {
-    let combined = '';
-    try {
-      const out = execFileSync('figma-developer-mcp', ['--figma-api-key=fake', '--stdio'], {
-        input: '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"sc","version":"1"}}}\n{"jsonrpc":"2.0","method":"notifications/initialized"}\n{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}',
-        encoding: 'utf8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'],
-      });
-      combined = out;
-    } catch (e) { combined = (e.stdout || '') + (e.stderr || ''); }
-    const hasBoot = /Figma MCP Server/.test(combined);
-    // schema 完整判定：tools/list 返回里含 inputSchema 字段
-    const hasSchema = /inputSchema/.test(combined);
-    check('4c. Framelink server 启动 + schema 完整', hasBoot && hasSchema,
-      hasBoot && hasSchema ? 'server boot 成功 + tools/list 返回完整 inputSchema ✅'
-      : hasBoot ? 'server boot 成功但 schema 可能不完整（parameters:null）——检查 npx 缓存或改用全局预装'
-                : 'server 未启动——确认 figma-developer-mcp 已全局安装: npm install -g figma-developer-mcp');
+    const out = execFileSync('which', ['figma-developer-mcp'], {
+      encoding: 'utf8', timeout: 3000,
+    }).trim();
+    check('4c. figma-developer-mcp 命令全局可用', !!out,
+      out ? `✅ 在 PATH: ${out}（IDE 启动时直接调用，不经 npx 下载）`
+          : '命令未找到——运行 npm install -g figma-developer-mcp 后重试');
   } catch (e) {
-    check('4c. Framelink server 启动 + schema 完整', false, `启动失败: ${e.message.slice(0,80)}。确认已 npm install -g figma-developer-mcp`);
+    check('4c. figma-developer-mcp 命令全局可用', false,
+      '命令未找到——运行 npm install -g figma-developer-mcp 后重试。已装但找不到则检查 PATH');
   }
 }
 
