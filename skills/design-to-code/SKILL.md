@@ -20,7 +20,7 @@ description: 把 Figma 设计稿或 UI 截图还原成前端代码时使用。�
 
 ## 端到端主流程（7 步）
 
-> **关键！f2c 的 `get_code_to_component` 默认不进主流程**。f2c 生成的代码草稿布局常混乱（因为它不看用户截图、不读 Framelink 精确数值，只按 Figma 原始节点树出码），把它的输出当最终结果会导致布局错乱。主流程走"模型自己生成代码"，f2c 仅作可选参考——详见下方"f2c 使用纪律"。
+> **关键！f2c 的 `get_code_to_component` 已从 MCP 配置中禁用**（实测证明模型会偷懒直接用 f2c 输出当最终代码，导致布局混乱，且会编造"已按截图修复"的幻觉汇报）。主流程只用 Framelink 取数据 + 模型自己生成代码。需要恢复 f2c 时见下方"f2c 使用纪律"。
 
 1. **取源** — 用户提供截图 + Figma 链接（**截图由用户给，模型不自己调 MCP 取截图**——Framelink v0.13.2 不提供 screenshot 工具）。
    - 调 Framelink 的 `get_figma_data(fileKey, nodeId)` 取节点树（layout/styling/content/component 信息）
@@ -28,19 +28,27 @@ description: 把 Figma 设计稿或 UI 截图还原成前端代码时使用。�
    - 只有截图没链接：跳到第 3 步，并按需读 `references/fallback-bitmap-only.md`
 2. **导出 ground truth** — 把 `get_figma_data` 返回的节点数据**整理成** `design-ground-truth.json`（tokens + raw_styles，每个值带出处 nodeId）。详见 `references/ground-truth-lock.md`。
 3. **视觉读图** — 看截图，**只输出结构化布局描述**（父子嵌套、视觉分组、对齐、相对间距、层级关系），**不要给精确像素**——这是 ground-truth 的事。结构化描述示例见 `references/fusion-protocol.md`。
-4. **fusion 融合 + 模型自己生成代码** — 按 `references/fusion-protocol.md` 处理冲突：结构与布局听截图，每个精确数值优先从 ground-truth.json 取值（注释 `/* from nodeId */`）；不在 ground-truth 的才标"截图估读"。冲突时结构优先。**模型基于融合后的结构 + ground-truth 数值，自己写出代码**——不要调 f2c 让它生成。
+4. **fusion 融合（两阶段，强制用户确认闸口）** —
+   - **4a. 输出结构描述给用户确认**：按 `references/fusion-protocol.md` 处理冲突（结构与布局听截图、数值听 ground-truth），输出**结构化布局描述 YAML**（父子嵌套 + 语义角色 + 相对间距 + 冲突仲裁标注），**不生成代码**。明确告诉用户："这是融合后的结构，确认对了再生成代码。"
+   - **4b. 用户确认后才生成代码**：用户回复"结构对了"或确认后，模型基于确认的结构 + ground-truth.json 数值，**自己写出代码**。数值优先从 ground-truth.json 取（注释 `/* from nodeId */`）；不在 ground-truth 的标"截图估读"。
+   - **为什么强制两阶段**：实测证明，模型会声称"已按截图 fusion 修复"但代码实际是 f2c 原样输出。强制 4a 输出结构描述给用户核对，能让模型的"假融合"被当场识破——代码可以对不上截图，但结构描述必须先过用户的眼。
 5. **下载真实素材** — 调 `download_figma_images(fileKey, nodes, localPath)` 把截图里看到的图标/图片下到项目约定目录（如 `assets/`、`public/figma-assets/`）。**不要用 picsum/placeholder**——这是反捏造红线 #1 的正解。
 6. **校验护栏** — 跑 `scripts/verify-ground-truth.js` 列未匹配值清单；对照 `references/anti-fabrication.md` 自查占位图/硬编码文案/臆造组件。
-7. **回环验证** — headless 渲染生成页 → 与截图视觉 diff → 不一致回到第 4 步。
+7. **回环验证** — headless 渲染生成页 → 与截图视觉 diff → 不一致回到第 4a 步。
 
 ## f2c 使用纪律（重要）
 
-**默认不调 f2c。** f2c 的 `get_code_to_component` 输出布局混乱（设计不规范时它会按 Figma 原始节点树出码，不看截图、不读 ground-truth），把它当最终结果正是本 skill 要防止的问题。
+**f2c 已从 MCP 配置中禁用**（`~/.gemini/config/mcp_config.json`）。实测原因：模型会偷懒把 f2c 输出当最终代码，且编造"已按截图修复布局"的幻觉汇报——软约束挡不住这种"嘴上 fusion、身体直接用 f2c"的行为。
 
-何时可用 f2c：
+何时重新启用 f2c（需手动恢复配置）：
 - 你明确想要"快速看一眼大致结构"——但 f2c 输出**仅作参考**，必须按截图重写布局
-- 想用 f2c 自动下载素材的副作用（它会批量导出设计稿图标/图片到 `assets/`）——此时只取素材不取代码
-- 复杂组件、用户明说"用 f2c 出草稿我来改"——同理，f2c 输出是草稿不是最终代码
+- 想用 f2c 自动下载素材的副作用（Framelink 的 `download_figma_images` 可替代此功能）
+
+恢复方法：
+```bash
+cp ~/.gemini/config/mcp_config.json.f2c-backup ~/.gemini/config/mcp_config.json
+# 重启 Antigravity
+```
 
 **严禁**：把 f2c 生成的代码直接交付、或把 f2c 输出当成 fusion 产物。f2c 输出必须经过"读截图→重写布局→对齐 ground-truth 数值"的 fusion 重写。
 
