@@ -8,7 +8,8 @@
  *   1. plugin 文件完整性
  *   2. Node 可用性
  *   3. Antigravity 安装环境（plugin 目录 / skill 软链 / GEMINI.md 约束追加）
- *   4. Figma MCP 配置（mcpServers 数量，不打印 token）
+ *   4a. Framelink MCP 在位（主流程必需，取数据+下素材）
+ *   4b. f2c MCP 已禁用（防偷懒——实测模型会直接用 f2c 输出当最终代码）
  *   5. hook 脚本 dtc-hook.js（占位图/lorem 能拦、正常能放行）
  *   6. verify 脚本 verify-ground-truth.js（UNMATCHED/PENDING/OK 三态）
  *
@@ -105,9 +106,17 @@ function checkMcp() {
   try { cfg = JSON.parse(fs.readFileSync(MCP_CONFIG, 'utf8')); }
   catch (e) { check('4. Figma MCP 配置', false, `解析失败: ${e.message}`); return; }
   const servers = Object.keys(cfg.mcpServers || {});
-  // 不打印 token/args，只报 server 名
-  check('4. Figma MCP 配置', servers.length > 0,
-    servers.length ? `已配 ${servers.length} 个 MCP server: ${servers.join(', ')}` : 'mcpServers 为空');
+  const hasFramelink = servers.some(s => /framelink/i.test(s));
+  const hasF2c = servers.some(s => /f2c/i.test(s));
+  const backupExists = fs.existsSync(path.join(CONFIG_DIR, 'mcp_config.json.f2c-backup'));
+
+  // 4a. Framelink 必须在位
+  check('4a. Framelink MCP 在位', hasFramelink,
+    hasFramelink ? `Framelink 已配 (${servers.filter(s=>/framelink/i.test(s)).join(', ')})` : '未找到 Framelink MCP——需配置 figma-developer-mcp');
+
+  // 4b. f2c 必须已禁用（主流程防偷懒）
+  check('4b. f2c MCP 已禁用', !hasF2c,
+    !hasF2c ? 'f2c 已从 mcp_config.json 移除（主流程防偷懒）' + (backupExists ? '，备份在 mcp_config.json.f2c-backup' : '') : '⚠️ f2c 仍在配置中——实测证明模型会偷懒直接用 f2c 输出，建议移除（备份后）');
 }
 
 // ---------- 5. hook 脚本 ----------
