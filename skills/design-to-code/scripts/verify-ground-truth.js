@@ -17,6 +17,12 @@
  *   - 未命中但同行或下一行带"估读"标记 → [PENDING] 已知
  *
  * 退出码：有 [UNMATCHED] → 1，否则 0。
+ *
+ * v2 增强：先做 ground-truth.json 完整性检查（integrity check）：
+ *   - raw_styles 少于 10 条 → [INTEGRITY_FAIL] 报警（模型偷懒没逐节点生成）
+ *   - nodeId 不匹配 ^\d+:\d+$ → [INTEGRITY_FAIL] 报警（伪造 nodeId）
+ *   - via 字段非 framelink get_figma_data → [INTEGRITY_FAIL] 报警（伪造来源）
+ *   integrity 失败时仍继续扫代码，但报告头部标红警告。
  */
 
 const fs = require('fs');
@@ -51,6 +57,8 @@ function buildIndex(gt) {
   const norm = (v) => String(v).toLowerCase().trim();
   const pushColor = (v) => {
     if (typeof v === 'string' && v.startsWith('#')) idx.colors.add(norm(v));
+    // 也支持 rgba() 格式
+    if (typeof v === 'string' && /^rgba?\(/.test(v)) idx.colors.add(norm(v));
   };
   const pushNum = (v) => {
     const n = Number(v);
@@ -61,14 +69,55 @@ function buildIndex(gt) {
   (gt.tokens?.typography || []).forEach(t => { pushNum(t.fontSize); });
   (gt.tokens?.spacing || []).forEach(t => pushNum(t.value));
   (gt.tokens?.radius || []).forEach(t => pushNum(t.value));
-  // raw_styles
+  // raw_styles (v2: 按节点 + role 标注)
   (gt.raw_styles || []).forEach(s => {
     (s.fills || []).forEach(f => { if (f.color) pushColor(f.color); });
+    (s.strokes || []).forEach(f => { if (f.color) pushColor(f.color); });
+    if (s.textColor) pushColor(s.textColor);
     if (s.cornerRadius != null) pushNum(s.cornerRadius);
     if (s.fontSize != null) pushNum(s.fontSize);
-    if (s.itemSpacing != null) pushNum(s.itemSpacing);
+    if (s.textStyle?.fontSize != null) pushNum(s.textStyle.fontSize);
+    if (s.gap != null) pushNum(s.gap);
+    if (s.itemSpacing != null) pushNum(s.itemSpacing); // 兼容 v1
   });
   return idx;
+}
+
+// ---------- ground-truth 完整性检查（防伪造） ----------
+function checkIntegrity(gt) {
+  const issues = [];
+  if (!gt) return issues;
+
+  // 1. raw_styles 条数（v2 要求逐节点生成，至少 10 条）
+  const rawCount = (gt.raw_styles || []).length;
+  if (rawCount < 10) {
+    issues.push(`raw_styles 只有 ${rawCount} 条（要求 ≥10 条逐节点生成）——疑似偷懒或伪造`);
+  }
+
+  // 2. nodeId 格式（必须是纯数字冒号，如 1234:5678）
+  const nodeIdRe = /^\d+:\d+$/;
+  const badNodeIds = [];
+  const allNodeIds = [
+    ...(gt.tokens?.colors || []).map(t => t.nodeId),
+    ...(gt.tokens?.typography || []).map(t => t.nodeId),
+    ...(gt.tokens?.spacing || []).map(t => t.nodeId),
+    ...(gt.tokens?.radius || []).map(t => t.nodeId),
+    ...(gt.raw_styles || []).map(s => s.nodeId),
+  ].filter(Boolean);
+  for (const id of allNodeIds) {
+    if (!nodeIdRe.test(id)) badNodeIds.push(id);
+  }
+  if (badNodeIds.length > 0) {
+    issues.push(`nodeId 格式异常（共 ${badNodeIds.length} 个非数字冒号格式）——疑似伪造。示例: ${badNodeIds.slice(0, 3).join(', ')}`);
+  }
+
+  // 3. via 字段（必须是 framelink get_figma_data）
+  const via = gt.source?.via || '';
+  if (via && !/framelink.*get_figma_data/i.test(via)) {
+    issues.push(`via="${via}" 非预期值（应为 "framelink get_figma_data"）——疑似伪造来源`);
+  }
+
+  return issues;
 }
 
 // ---------- 规则 ----------
@@ -215,6 +264,9 @@ if (gtRaw) {
 }
 const idx = buildIndex(gt);
 
+// 完整性检查（防伪造）
+const integrityIssues = checkIntegrity(gt);
+
 const files = [];
 walk(CODE_DIR, files);
 if (files.length === 0) {
@@ -227,13 +279,21 @@ files.forEach(f => scanFile(f, idx, results));
 const unmatched = results.filter(r => r.level === 'UNMATCHED');
 const pending = results.filter(r => r.level === 'PENDING');
 
-if (results.length === 0) {
+if (results.length === 0 && integrityIssues.length === 0) {
   console.log('✅ 未发现硬编码颜色/尺寸，ground-truth 校验通过。');
   process.exit(0);
 }
 
 // 输出
 console.log('--- design-to-code ground-truth 校验报告 ---');
+
+// 先输出完整性检查结果
+if (integrityIssues.length > 0) {
+  console.log(`\n🔴 [INTEGRITY_FAIL] ground-truth.json 完整性问题（疑似伪造/偷懒）:`);
+  integrityIssues.forEach(issue => console.log(`  ⚠️ ${issue}`));
+  console.log('');
+}
+
 console.log(`扫描文件: ${files.length}，命中项: ${results.length}（UNMATCHED: ${unmatched.length}, PENDING: ${pending.length}）\n`);
 
 if (unmatched.length) {
@@ -252,4 +312,4 @@ if (pending.length) {
   console.log('');
 }
 
-process.exit(unmatched.length ? 1 : 0);
+process.exit(unmatched.length || integrityIssues.length ? 1 : 0);

@@ -20,42 +20,129 @@
 
 **注意工具名**：Framelink v0.13.2 只暴露 `get_figma_data` 和 `download_figma_images` 两个工具——**没有 `get_variable_defs` / `get_design_context` / `get_node_screenshot`**（那些是 Figma 官方 MCP 的工具名，不要写错）。
 
-导出后落盘项目根 `design-ground-truth.json`，schema 见 `templates/ground-truth.schema.json`。样例：
+导出后落盘项目根 `design-ground-truth.json`，schema 见 `templates/ground-truth.schema.json`。样例（v2 schema，raw_styles 按节点+角色标注）：
 
 ```json
 {
   "source": {
     "figma_file": "abc123",
     "frame_node_id": "12:345",
-    "exported_at": "2026-07-27T10:00:00Z",
+    "exported_at": "2026-08-03T10:00:00Z",
     "via": "framelink get_figma_data"
   },
   "tokens": {
     "colors": [
-      { "name": "primary", "value": "#3B82F6", "nodeId": "1:2", "path": "Button.fills[0].color" },
-      { "name": "text-primary", "value": "#111827", "nodeId": "1:3", "path": "Text.fills[0].color" }
+      { "name": "primary", "value": "#6E29F6", "nodeId": "1:2" },
+      { "name": "text-primary", "value": "#0D0D0D", "nodeId": "1:3" },
+      { "name": "border-gray", "value": "#D9D9D9", "nodeId": "1:4" }
     ],
     "typography": [
-      { "name": "h1", "fontSize": 24, "fontWeight": 700, "lineHeight": 32, "nodeId": "2:1" },
-      { "name": "body", "fontSize": 14, "fontWeight": 400, "lineHeight": 20, "nodeId": "2:2" }
+      { "name": "Body Regular", "fontSize": 14, "fontWeight": 400, "lineHeight": 24, "nodeId": "2:2" },
+      { "name": "Title S", "fontSize": 20, "fontWeight": 600, "lineHeight": 32, "nodeId": "2:1" }
     ],
     "spacing": [
-      { "name": "gap-md", "value": 12, "nodeId": "3:1", "path": "Container.itemSpacing" }
+      { "name": "gap-md", "value": 12, "nodeId": "3:1" }
     ],
     "radius": [
-      { "name": "card-radius", "value": 8, "nodeId": "1:2", "path": "Button.cornerRadius" }
+      { "name": "card", "value": 20, "nodeId": "1:2" }
     ]
   },
   "raw_styles": [
-    { "nodeId": "1:2", "type": "BUTTON", "fills": [{"type":"SOLID","color":"#3B82F6"}], "cornerRadius": 8, "itemSpacing": 12 }
+    {
+      "nodeId": "1:2",
+      "name": "Recharge Card",
+      "role": "card",
+      "fills": [
+        { "color": "#FFFFFF", "role": "background" },
+        { "color": "rgba(0,0,0,0.16)", "role": "shadow" }
+      ],
+      "strokes": [
+        { "color": "#D9D9D9", "role": "border", "width": 1 }
+      ],
+      "cornerRadius": 20,
+      "padding": "20px 16px",
+      "layoutMode": "vertical"
+    },
+    {
+      "nodeId": "1:5",
+      "name": "Submit Button",
+      "role": "button",
+      "fills": [
+        { "color": "linear-gradient(90deg,#02F6F7,#E2B0FF)", "role": "background" }
+      ],
+      "strokes": [],
+      "cornerRadius": 22,
+      "textColor": "#1E1B4B",
+      "textStyle": { "ref": "Body Regular", "fontSize": 14, "fontWeight": 700 }
+    },
+    {
+      "nodeId": "1:6",
+      "name": "Order ID",
+      "role": "text",
+      "fills": [],
+      "strokes": [],
+      "textColor": "#0D0D0D",
+      "textStyle": { "ref": "Body Regular", "fontSize": 14, "fontWeight": 400 }
+    }
   ]
 }
 ```
 
-字段说明：
-- `tokens`：人友好的命名 token 列表，按类别分组。`name` 是给代码引用的别名
-- `raw_styles`：原始节点样式，给 `verify-ground-truth.js` 做数值反查兜底
-- 每条必带 `nodeId`，方便事后回 Figma 定位
+## 字段说明（v2 schema）
+
+- `tokens`：扁平的值清单，按类别分组（colors / typography / spacing / radius）。`name` 是给代码引用的别名，但**只记值不记应用关系**——"白底灰边"这种应用关系在 `raw_styles` 里
+- `raw_styles`：**按节点**记录的角色化样式。每个节点一条，是 ground-truth 的核心——让模型生成 CSS 时不用靠截图猜"白底灰边"的应用关系，直接查每个节点的 `fills[role=background]` / `strokes[role=border]`
+  - 必填字段：`nodeId`（必须是真实 Figma `1234:5678` 格式，不接受英文后缀）、`role`（语义角色）、`fills`
+  - `fills` 每条带 `role` 标注：`background` 主背景 / `surface` 卡片表面 / `shadow` 阴影 / `overlay` 蒙层
+  - `strokes` 每条带 `role` 标注：`border` 卡片边框 / `divider` 分割线 / `outline` 外描边
+  - TEXT 节点额外填 `textColor` + `textStyle`（引用 tokens.typography 的 name）
+  - 布局字段：`cornerRadius` / `padding` / `gap` / `layoutMode`
+- **raw_styles 必须逐节点生成**（不止 1 条）。少于 10 条视为偷懒，verify 脚本会报警。
+
+样例（v2 raw_styles）：
+
+```json
+"raw_styles": [
+  {
+    "nodeId": "1:2",
+    "name": "Recharge Card",
+    "role": "card",
+    "fills": [
+      { "color": "#FFFFFF", "role": "background" },
+      { "color": "rgba(0,0,0,0.16)", "role": "shadow" }
+    ],
+    "strokes": [
+      { "color": "#D9D9D9", "role": "border", "width": 1 }
+    ],
+    "cornerRadius": 20,
+    "padding": "20px 16px",
+    "layoutMode": "vertical"
+  },
+  {
+    "nodeId": "1:3",
+    "name": "Submit Button",
+    "role": "button",
+    "fills": [
+      { "color": "linear-gradient(90deg,#02F6F7,#E2B0FF)", "role": "background" }
+    ],
+    "strokes": [],
+    "cornerRadius": 22,
+    "textColor": "#1E1B4B",
+    "textStyle": { "ref": "Body M", "fontSize": 14, "fontWeight": 700 }
+  },
+  {
+    "nodeId": "1:4",
+    "name": "Order ID Text",
+    "role": "text",
+    "fills": [],
+    "strokes": [],
+    "textColor": "#0D0D0D",
+    "textStyle": { "ref": "Body Regular", "fontSize": 14, "fontWeight": 400 }
+  }
+]
+```
+
+**关键**：`role` + `fills[role]` + `strokes[role]` 让模型从"查到 `#FFFFFF` 在 tokens 里但不知道用在哪"升级到"节点 1:2 是 card、bg=#FFFFFF、border=#D9D9D9"——不再靠截图猜应用关系。
 
 ## 如何用它锁定代码
 

@@ -26,7 +26,7 @@ description: 把 Figma 设计稿或 UI 截图还原成前端代码时使用。�
    - 调 Framelink 的 `get_figma_data(fileKey, nodeId)` 取节点树（layout/styling/content/component 信息）
    - 从 URL 提取 fileKey（`figma.com/(file|design)/<fileKey>/...`）和 nodeId（`?node-id=<nodeId>`，把 `-` 改成 `:`）
    - 只有截图没链接：跳到第 3 步，并按需读 `references/fallback-bitmap-only.md`
-2. **导出 ground truth** — 把 `get_figma_data` 返回的节点数据**整理成** `design-ground-truth.json`（tokens + raw_styles，每个值带出处 nodeId）。详见 `references/ground-truth-lock.md`。
+2. **导出 ground truth** — 把 `get_figma_data` 返回的节点数据**整理成** `design-ground-truth.json`。**关键：raw_styles 必须逐节点生成（不止 1 条）**，每条带 `role`（card/button/text/...）+ `fills[role=background/shadow]` + `strokes[role=border/divider]`——这样模型生成 CSS 时不用靠截图猜"白底灰边"的应用关系，直接查每个节点的 fills/strokes 角色。nodeId 必须是真实 Figma `1234:5678` 格式（纯数字冒号，不接受 `:purple` 英文后缀）。详见 `references/ground-truth-lock.md` 和 `templates/ground-truth.schema.json`。
 3. **视觉读图** — 看截图，**只输出结构化布局描述**（父子嵌套、视觉分组、对齐、相对间距、层级关系），**不要给精确像素**——这是 ground-truth 的事。结构化描述示例见 `references/fusion-protocol.md`。
 4. **fusion 融合（两阶段，强制用户确认闸口）** —
    - **4a. 输出结构描述给用户确认**：按 `references/fusion-protocol.md` 处理冲突（结构与布局听截图、数值听 ground-truth），输出**结构化布局描述 YAML**（父子嵌套 + 语义角色 + 相对间距 + 冲突仲裁标注），**不生成代码**。明确告诉用户："这是融合后的结构，确认对了再生成代码。"
