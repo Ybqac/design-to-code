@@ -1,3 +1,28 @@
+// 1. 补全缺失的 __html__ UI 及 WebSocket 代理
+var __html__ = `<!DOCTYPE html><html><body><script>
+  const socket = new WebSocket("ws://localhost:3055");
+  socket.onopen = () => {
+    socket.send(JSON.stringify({ type: "join", channel: "talk-to-figma" }));
+    console.log("✅ WebSocket 已成功连接到 localhost:3055");
+  };
+  socket.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      const msg = data.message || data;
+      if (msg && msg.command) {
+        parent.postMessage({ pluginMessage: { type: "execute-command", id: msg.id || data.id, command: msg.command, params: msg.params } }, "*");
+      }
+    } catch(err) {}
+  };
+  window.onmessage = (e) => {
+    if (e.data && e.data.pluginMessage) {
+      const { type, id, result, error } = e.data.pluginMessage;
+      if (type === "command-result" || type === "command-error") {
+        socket.send(JSON.stringify({ id, type: "message", channel: "talk-to-figma", message: { id, result: result || {}, error } }));
+      }
+    }
+  };
+</script></body></html>`;
 // This is the main code file for the Cursor MCP Figma plugin
 // It handles Figma API commands
 
