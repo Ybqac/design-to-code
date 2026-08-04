@@ -119,10 +119,13 @@ f2c（已在配置里时作为快速草稿备份，**不允许作为最终代码
 ```
 @design-to-code 还原这个页面到 <target-dir>
 [截图]
-（Figma 里选中目标 frame）
 ```
 
 或直接说"还原这个 Figma 设计"——SKILL.md 的 description 覆盖"figma/设计稿/截图转代码/还原页面/UI 实现"等关键词，自动触发。
+
+取源支持两种方式（任选其一）：
+- **选中 frame**：Figma 里选中目标节点 + 截图 → 模型调 `read_my_design`
+- **传链接**：贴 Figma URL（含 `?node-id=xxx`）+ 截图 → 模型从 URL 提取 nodeId 调 `get_node_info`，不需在 Figma 里选中
 
 ### 7 步主流程
 
