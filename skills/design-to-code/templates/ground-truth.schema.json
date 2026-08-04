@@ -161,6 +161,8 @@
             }
           },
           "cornerRadius": { "type": "number", "description": "px" },
+          "width": { "type": "number", "description": "节点宽度 px（从 Figma absoluteBoundingBox.width 取）" },
+          "height": { "type": "number", "description": "节点高度 px（从 Figma absoluteBoundingBox.height 取）" },
           "padding": {
             "type": "string",
             "description": "CSS shorthand，如 '20px 16px'"

@@ -15,19 +15,21 @@ ground-truth 只服务"反捏造四红线"里的第四条（禁凭空数值）�
 
 ## 如何导出 design-ground-truth.json
 
-用 Framelink MCP 的 `get_figma_data` 工具取数据，REST API 兜底：
+用 TalkToFigma MCP 的 `read_my_design` 工具取原始节点树，直接填进 ground-truth：
 
 ```
-1. Framelink MCP：调 get_figma_data(fileKey, nodeId) → 拿节点树 layout/styling/content/component
-   - fileKey 从 URL 提取：figma.com/(file|design)/<fileKey>/...
-   - nodeId 从 URL 参数提取：?node-id=12-345 → 改成 12:345（破折号换冒号）
-   - 返回的 JSON 已被 Framelink 简化为模型友好的结构（含 fills/strokes/layout/typography/content）
-2. 兜底 REST API：GET https://api.figma.com/v1/files/<file_key>/nodes?ids=<nodeIds>
-   → 遍历 nodes[].document，把 fills/strokes/effects/layoutGeometry 抽出来
-   （当 Framelink 不可用、或返回被截断时用）
+1. TalkToFigma MCP：调 join_channel(channel_name) → 连接 Figma 插件（前置条件）
+2. TalkToFigma MCP：调 read_my_design → 读取当前选中节点的完整节点树
+   - 返回 JSON 含 fills[] / strokes[] / characters / style / absoluteBoundingBox / cornerRadius / children
+   - 每个 TEXT 节点的 characters 是真实文案（直接填入代码，不用靠截图估读）
+   - 每个 FRAME/INSTANCE 的 absoluteBoundingBox 含 width/height（精确尺寸）
+3. 兜底：调 get_node_info(nodeId) 取单个节点、调 get_nodes_info(nodeIds[]) 批量取
+4. 更兜底：当 TalkToFigma 不可用时，用 Framelink get_figma_data(fileKey, nodeId)（受 Figma REST 限流，会 429）
 ```
 
-**注意工具名**：Framelink v0.13.2 只暴露 `get_figma_data` 和 `download_figma_images` 两个工具——**没有 `get_variable_defs` / `get_design_context` / `get_node_screenshot`**（那些是 Figma 官方 MCP 的工具名，不要写错）。
+**TalkToFigma 的 `read_my_design` 返回的是原始 Figma 节点数据**（不是转码后的代码，也不是简化后的摘要），可以直接机械填入 raw_styles，**不需要从代码反推**。
+
+**工具名注意**：TalkToFigma 暴露 `join_channel` / `read_my_design` / `get_node_info` / `get_nodes_info` / `get_styles` / `get_local_components` / `export_node_as_image` 等 40 个工具——**不要用 Framelink 的 `get_figma_data` 工具名**，两个 MCP 是不同的 server。
 
 导出后落盘项目根 `design-ground-truth.json`，schema 见 `templates/ground-truth.schema.json`。样例（v2 schema，raw_styles 按节点+角色标注）：
 
@@ -183,7 +185,8 @@ node scripts/verify-ground-truth.js <code-dir> <ground-truth.json>
 
 按可获取程度降级：
 
-1. Framelink 的 `get_figma_data` 返回截断 → 用 `depth` 参数控制深度，或拆小 frame 一段段取，合并落盘
-2. Framelink 拿到的数据缺关键字段 → 兜底走 Figma REST API（`GET /files/<key>/nodes?ids=...`）取原始 JSON
-3. 用户给的 Figma 链接无法访问（权限/token 失效） → 告诉用户截图+链接都需要，落空 ground-truth.json，按 `references/fallback-bitmap-only.md` 走位图兜底
+1. TalkToFigma `read_my_design` 返回截断（节点太多）→ 用 `get_node_info` 分段取关键节点，合并落盘
+2. TalkToFigma 拿到的数据缺某个字段 → 兜底调 `get_node_info(nodeId)` 取单个节点完整信息
+3. TalkToFigma 整个 server 不可用（bun socket 没跑、Figma 插件没连） → 用 Framelink `get_figma_data`（受 Figma REST 限流，会 429）
+4. Figma REST 被限流 + TalkToFigma 也没连 → 告诉用户"两个数据源都不通，需要开启 bun socket + Figma 插件"，落空 ground-truth.json，按 `references/fallback-bitmap-only.md` 走位图兜底
 
