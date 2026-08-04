@@ -101,6 +101,8 @@ description: 把 Figma 设计稿或 UI 截图还原成前端代码时使用。�
   - `references/framework-miniapp.md` — 微信/支付宝小程序
 - **纯位图无源文件时读**：
   - `references/fallback-bitmap-only.md` — 用 Surya / PP-StructureV3 兜底版面识别
+- **Figma 账号无 Development 菜单时读**：
+  - `references/console-injection.js` — Figma Console 注入版插件代码（Starter/未升级套餐绕过菜单安装）
 
 ## scripts/
 
