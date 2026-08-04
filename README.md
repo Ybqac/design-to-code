@@ -20,6 +20,7 @@ Antigravity IDE plugin：把 Figma 设计稿还原成前端代码的工作约束
 ```
 design-to-code-plugin/                   plugin 根
 ├── plugin.json                          manifest（Antigravity 官方规范）
+├── console-injection.js                 Figma Console 注入版插件代码（Starter 账号绕过菜单安装）
 ├── skills/
 │   └── design-to-code/                  完整 skill（自包含）
 │       ├── SKILL.md                     主入口：fusion 流程 + 触发条件 + 资源索引
@@ -30,8 +31,7 @@ design-to-code-plugin/                   plugin 根
 │       │   ├── framework-react.md          React + Tailwind / CSS Modules
 │       │   ├── framework-vue.md            Vue 3 + <script setup>
 │       │   ├── framework-miniapp.md        微信/支付宝小程序
-│       │   ├── fallback-bitmap-only.md     纯位图无源文件时的兜底
-│       │   └── console-injection.js        Figma Console 注入版插件代码（绕过菜单安装）
+│       │   └── fallback-bitmap-only.md     纯位图无源文件时的兜底
 │       ├── scripts/
 │       │   └── verify-ground-truth.js      零依赖 Node 校验脚本（数值反查 + INTEGRITY_FAIL 防伪）
 │       └── templates/                   Antigravity 专属模板
@@ -92,7 +92,7 @@ cd ~/code/cursor-talk-to-figma-mcp && bun install && bun socket
 
 **每次用之前**：终端跑 `bun socket`（常驻）→ Figma 里选中 frame → 运行插件 join channel。
 
-**Figma 账号无 Development 菜单时**（Starter/未升级套餐）：打开 Figma 设计文件 → 浏览器 DevTools Console（F12 → Console）→ 粘贴 `references/console-injection.js` 全文 → 回车。插件 UI 会内联注入，自动连接 `ws://localhost:3055`，功能与正式安装版一致。
+**Figma 账号无 Development 菜单时**（Starter/未升级套餐）：打开 Figma 设计文件 → 浏览器 DevTools Console（F12 → Console）→ 粘贴仓库根目录 `console-injection.js` 全文 → 回车。插件 UI 会内联注入，自动连接 `ws://localhost:3055`，功能与正式安装版一致。
 
 ### 3. 备份 MCP（可选）
 
