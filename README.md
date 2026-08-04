@@ -72,7 +72,6 @@ TalkToFigma 走 WebSocket + Figma 插件，不经 Figma REST API，不受 429 �
 curl -fsSL https://bun.sh/install | bash
 
 # b. clone repo + 启动 WebSocket server（常驻，监听 localhost:3055）
-git clone https://github.com/nicepkg/gpt-runner ~/code/nicepkg-gpt-runner 2>/dev/null  # 略
 git clone https://github.com/grab/cursor-talk-to-figma-mcp.git ~/code/cursor-talk-to-figma-mcp
 cd ~/code/cursor-talk-to-figma-mcp && bun install && bun socket
 ```
