@@ -24,14 +24,14 @@ description: 把 Figma 设计稿或 UI 截图还原成前端代码时使用。�
 
 **前置条件（每次用之前必须做）**：
 1. 终端跑 `bun socket`（在 `~/code/cursor-talk-to-figma-mcp` 目录下），WebSocket server 常驻监听 localhost:3055
-2. Figma 里打开设计文件，选中要还原的 frame
+2. Figma 里打开设计文件（可选：选中要还原的 frame——给链接+nodeId 时不需选中）
 3. 运行 cursor-talk-to-figma-mcp 插件，join 一个 channel（如 `talk-to-figma`）
 
-1. **取源** — 用户提供截图 + Figma 里选中的节点（不需要 Figma 链接，TalkToFigma 直接读当前选中节点）。
+1. **取源** — 用户提供截图 + Figma 里选中的节点 **或** Figma 链接（含 nodeId）。两种方式都支持：
    - 模型先调 TalkToFigma 的 `join_channel(channel_name)` 连接 Figma 插件
-   - 再调 `read_my_design` 读取当前选中节点的完整节点树数据
-   - 备选：调 `get_node_info(nodeId)` 读单个节点、调 `get_nodes_info(nodeIds[])` 批量读多节点
-   - 通过了 TalkToFigma 的 `export_node_as_image(nodeId, format)` **截图能力**——可以导出任意节点为 PNG/SVG，作为"节点内截图"（不再需要用户手动截）。
+   - **方式 A（选中 frame）**：调 `read_my_design` 读取当前选中节点的完整节点树数据
+   - **方式 B（给链接）**：从 URL 提取 nodeId（`?node-id=14669-9900` → `14669:9900`，破折号换冒号），调 `get_node_info(nodeId)` 读单个节点、或 `get_nodes_info(nodeIds[])` 批量读多节点。不需在 Figma 里选中
+   - 备选：调 `export_node_as_image(nodeId, format)` **截图能力**——可以导出任意节点为 PNG/SVG，作为"节点内截图"（不再需要用户手动截）。
    - 只有截图没 Figma 访问：跳到第 3 步，并按需读 `references/fallback-bitmap-only.md`
 2. **导出 ground truth** — 把 `read_my_design` 返回的原始节点树数据**整理成** `design-ground-truth.json`。**关键：raw_styles 必须逐节点生成（不止 1 条）**，每条从节点树直接填：`nodeId`（真实 Figma 纯数字冒号格式）+ `role`（card/button/text/...）+ `fills[role=background/shadow]` + `strokes[role=border/divider]` + `width`/`height`（从 `absoluteBoundingBox` 取）+ `cornerRadius` + `textColor`/`textStyle`（TEXT 节点）。**不再需要从代码反推**——原始节点数据直接含 fills/strokes/typography/boundingBox，模型机械填入即可。nodeId 不接受 `:purple` 英文后缀。详见 `references/ground-truth-lock.md` 和 `templates/ground-truth.schema.json`。
 3. **视觉读图** — 看截图（用户给的或 TalkToFigma `export_node_as_image` 导出的），**只输出结构化布局描述**（父子嵌套、视觉分组、对齐、相对间距、层级关系），**不要给精确像素**——这是 ground-truth 的事。结构化描述示例见 `references/fusion-protocol.md`。
