@@ -111,10 +111,10 @@ function checkIntegrity(gt) {
     issues.push(`nodeId 格式异常（共 ${badNodeIds.length} 个非数字冒号格式）——疑似伪造。示例: ${badNodeIds.slice(0, 3).join(', ')}`);
   }
 
-  // 3. via 字段（必须是 framelink get_figma_data）
+  // 3. via 字段（接受 framelink get_figma_data 或 talktofigma read_my_design / get_node_info）
   const via = gt.source?.via || '';
-  if (via && !/framelink.*get_figma_data/i.test(via)) {
-    issues.push(`via="${via}" 非预期值（应为 "framelink get_figma_data"）——疑似伪造来源`);
+  if (via && !/framelink.*get_figma_data|talktofigma.*(read_my_design|get_node_info)/i.test(via)) {
+    issues.push(`via="${via}" 非预期值（应为 framelink get_figma_data 或 talktofigma read_my_design）——疑似伪造来源`);
   }
 
   return issues;

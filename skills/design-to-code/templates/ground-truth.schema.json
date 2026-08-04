@@ -16,7 +16,7 @@
         "exported_at": { "type": "string", "format": "date-time" },
         "via": {
           "type": "string",
-          "description": "导出方式：必须是 framelink get_figma_data（其他值视为伪造）"
+          "description": "导出方式：接受 framelink get_figma_data 或 talktofigma read_my_design / get_node_info（其他值视为伪造）"
         }
       }
     },

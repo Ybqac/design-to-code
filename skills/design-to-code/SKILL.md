@@ -106,29 +106,17 @@ description: 把 Figma 设计稿或 UI 截图还原成前端代码时使用。�
 
 - `scripts/verify-ground-truth.js` — 零依赖 Node 脚本。用法：`node verify-ground-truth.js <code-dir> <ground-truth.json>`，扫描 .tsx/.jsx/.vue/.wxml/.css，输出未在 ground-truth.json 找到出处的颜色/字号/间距清单。
 
-## templates/（用于把这套规则装进不同工具）
+## templates/（Antigravity 专属）
 
-通用三件（ZCode / Claude Code / Cursor）：
-- `templates/agents-md-fragment.md` — 注入 `<repo>/AGENTS.md` 或 `~/.zcode/AGENTS.md`
-- `templates/claude-md-fragment.md` — 注入 `~/.claude/CLAUDE.md`
-- `templates/cursor-rule.mdc` — `.cursor/rules/design-to-code.mdc`
-- `templates/zcode-command.md` — ZCode 的 `/figma` slash command
-- `templates/ground-truth.schema.json` — `design-ground-truth.json` 的 JSON Schema
-- `templates/posttooluse-hook.json` — ZCode PostToolUse hook 配置示例（P3，本 skill 不自动启用）
-
-Antigravity 专属（首选适配）：
 - `templates/gemini-md-fragment.md` — 注入 `~/.gemini/GEMINI.md`（与已有的 "No hardcoded values" 协同）
-- `templates/antigravity-rule.md` — 复制到 `<repo>/.agents/rules/design-to-code.md`，激活模式设 `Always On`
 - `templates/antigravity-hooks.json` — 复制到 `<repo>/.agents/hooks.json`，配 PreToolUse 硬拦 + PostToolUse 反馈
 - `templates/antigravity-hook-script.js` — hooks.json 调用的零依赖 Node 脚本（已冒烟测试通过）
 - `templates/antigravity-plugin-structure.md` — 打成 Antigravity plugin 的目录结构与安装说明
+- `templates/ground-truth.schema.json` — `design-ground-truth.json` 的 JSON Schema
 
-## 各工具装法速查
+## 装法速查
 
 - **Antigravity**（首选）：plugin 整包 clone 到 `~/.gemini/config/plugins/`（user 级）或 `<repo>/.agents/plugins/`（workspace 级）；Figma MCP 由用户自行在 `~/.gemini/config/mcp_config.json` 配置。详见 `templates/antigravity-*`
-- **ZCode**：skill 已在 `~/.agents/skills/` 可被发现；`zcode-command.md` 复制到 `~/.zcode/commands/figma.md` 作 `/figma`
-- **Claude Code**：skill 软链或复制到 `~/.claude/skills/`，`claude-md-fragment.md` 并入 `~/.claude/CLAUDE.md`
-- **Cursor**：`cursor-rule.mdc` 复制到 `<repo>/.cursor/rules/design-to-code.mdc`
 - **最小化**：只复制 `SKILL.md` + `references/anti-fabrication.md` 到任意项目，已能解决 80% 问题
 
 ## 不做什么

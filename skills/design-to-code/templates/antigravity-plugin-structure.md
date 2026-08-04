@@ -23,7 +23,7 @@
 │       └── scripts/
 │           └── verify-ground-truth.js
 ├── rules/
-│   └── design-to-code.md        # 复制 templates/antigravity-rule.md
+│   └── design-to-code.md        # workspace rule（plugin 自带，设 Always On）
 ├── hooks.json                   # 复制 templates/antigravity-hooks.json（去掉 _ 注释字段）
 └── scripts/
     └── dtc-hook.js              # 复制 templates/antigravity-hook-script.js

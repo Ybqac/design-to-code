@@ -8,8 +8,9 @@
  *   1. plugin 文件完整性
  *   2. Node 可用性
  *   3. Antigravity 安装环境（plugin 目录 / skill 软链 / GEMINI.md 约束追加）
- *   4a. Framelink MCP 在位（主流程必需，取数据+下素材）
- *   4b. f2c MCP 已禁用（防偷懒——实测模型会直接用 f2c 输出当最终代码）
+ *   4a. Figma MCP（TalkToFigma 或 Framelink）在位（至少一个数据源）
+ *   4b. TalkToFigma 在配置中（主流程首选，绕开 Figma REST 限流）
+ *   4c. MCP 启动命令可用（bun for TalkToFigma，figma-developer-mcp for Framelink）
  *   5. hook 脚本 dtc-hook.js（占位图/lorem 能拦、正常能放行）
  *   6. verify 脚本 verify-ground-truth.js（UNMATCHED/PENDING/OK 三态）
  *
@@ -99,6 +100,7 @@ function checkAntigravityEnv() {
 // ---------- 4. Figma MCP 配置 ----------
 // 检查所有可能的 mcp_config.json 路径——Antigravity 有多个配置目录，
 // IDE 读的未必是 config/ 那份。任一不一致就报警，防止"自检通过但 IDE 读错文件"。
+// 主流程用 TalkToFigma；Framelink 作为备份（受 Figma REST 限流）。
 const MCP_PATHS = [
   path.join(GEMINI_DIR, 'config', 'mcp_config.json'),           // 标准 user 级
   path.join(GEMINI_DIR, 'antigravity-ide', 'mcp_config.json'),  // IDE 专属
@@ -106,55 +108,56 @@ const MCP_PATHS = [
 ];
 
 function checkMcp() {
-  // 4a. 所有已知路径都必须有 Framelink
+  // 4a. 所有已知路径都必须有 TalkToFigma 或 Framelink（至少一个 Figma 数据源）
   const pathResults = MCP_PATHS.map(p => {
-    if (!fs.existsSync(p)) return { path: p, exists: false, servers: [], hasFramelink: false, hasF2c: false };
+    if (!fs.existsSync(p)) return { path: p, exists: false, servers: [], hasFramelink: false, hasTalkToFigma: false, hasF2c: false };
     try {
       const cfg = JSON.parse(fs.readFileSync(p, 'utf8'));
       const servers = Object.keys(cfg.mcpServers || {});
       return {
         path: p, exists: true, servers,
         hasFramelink: servers.some(s => /framelink/i.test(s)),
+        hasTalkToFigma: servers.some(s => /talktofigma/i.test(s)),
         hasF2c: servers.some(s => /f2c/i.test(s)),
       };
     } catch (e) {
-      return { path: p, exists: true, parseError: e.message, servers: [], hasFramelink: false, hasF2c: false };
+      return { path: p, exists: true, parseError: e.message, servers: [], hasFramelink: false, hasTalkToFigma: false, hasF2c: false };
     }
   });
 
-  const allHaveFramelink = pathResults.every(r => r.hasFramelink);
-  const anyHasF2c = pathResults.some(r => r.hasF2c);
+  // 4a. 所有路径都必须有 Figma 数据源（TalkToFigma 主流程，或 Framelink 备份，至少其一）
+  const allHaveFigmaSource = pathResults.every(r => r.hasFramelink || r.hasTalkToFigma);
   const shortPath = (p) => p.replace(HOME, '~');
 
-  check('4a. Framelink MCP 在所有配置路径中就位', allHaveFramelink,
-    allHaveFramelink
-      ? `所有 ${pathResults.length} 个路径都有 Framelink`
-      : '部分路径缺 Framelink:\n' + pathResults.filter(r => !r.hasFramelink).map(r => `    ${shortPath(r.path)} → ${r.exists ? (r.servers.join(',') || '(空)') : '(文件不存在)'}`).join('\n'));
+  check('4a. Figma MCP（TalkToFigma 或 Framelink）在所有配置路径中就位', allHaveFigmaSource,
+    allHaveFigmaSource
+      ? `所有 ${pathResults.length} 个路径都有 Figma 数据源（TalkToFigma/Framelink）`
+      : '部分路径缺 Figma 数据源:\n' + pathResults.filter(r => !(r.hasFramelink || r.hasTalkToFigma)).map(r => `    ${shortPath(r.path)} → ${r.exists ? (r.servers.join(',') || '(空)') : '(文件不存在)'}`).join('\n'));
 
-  // 4b 已移除——f2c 现在重新启用（绕开 Figma REST 限流）。f2c 检测合并到 4c。
+  // 4b. TalkToFigma 是否在配置里（主流程首选，绕开 Figma REST 限流）
+  const anyHasTalkToFigma = pathResults.some(r => r.hasTalkToFigma);
+  check('4b. TalkToFigma MCP 在配置中（主流程首选）', anyHasTalkToFigma,
+    anyHasTalkToFigma ? '✅ TalkToFigma 已配置（走 WebSocket+插件，绕开 Figma REST 限流）' : '⚠️ TalkToFigma 未配置——主流程将退回 Framelink（受 Figma REST 429 限流）。建议配 TalkToFigma：在 mcp_config.json 加 TalkToFigma server');
 
-
-  // 4c. 检测 figma-developer-mcp 命令是否全局可用（用于 Framelink）
-  // 同时检测 f2c-mcp 是否在配置里（已恢复，绕开 Figma REST 限流）
-  let framelinkCmd = null;
+  // 4c. 检测 figma-developer-mcp 命令是否全局可用（用于 Framelink）+ bun 命令（用于 TalkToFigma）
+  // 兜底：bun 默认装在 ~/.bun/bin，子 shell PATH 可能不含，额外检查该路径文件是否存在
+  let framelinkCmd = null, bunCmd = null;
   try {
-    framelinkCmd = execFileSync('which', ['figma-developer-mcp'], {
-      encoding: 'utf8', timeout: 3000,
-    }).trim();
+    framelinkCmd = execFileSync('which', ['figma-developer-mcp'], { encoding: 'utf8', timeout: 3000 }).trim();
   } catch (e) { framelinkCmd = null; }
+  try {
+    bunCmd = execFileSync('which', ['bun'], { encoding: 'utf8', timeout: 3000 }).trim();
+  } catch (e) {
+    const bunFallback = path.join(HOME, '.bun', 'bin', 'bun');
+    if (fs.existsSync(bunFallback)) bunCmd = bunFallback; else bunCmd = null;
+  }
 
-  // f2c-mcp 检测（看任意一个 mcp_config 路径里有没有）
-  const f2cPresent = MCP_PATHS.some(p => {
-    try {
-      const cfg = JSON.parse(fs.readFileSync(p, 'utf8'));
-      return Object.keys(cfg.mcpServers || {}).some(s => /f2c/i.test(s));
-    } catch { return false; }
-  });
+  const parts = [];
+  if (anyHasTalkToFigma) parts.push(bunCmd ? '✅ bun 在 PATH（TalkToFigma 启动器）' : '⚠️ bun 未安装（TalkToFigma 需要：curl -fsSL https://bun.sh/install | bash）');
+  if (pathResults.some(r => r.hasFramelink)) parts.push(framelinkCmd ? '✅ figma-developer-mcp 在 PATH（Framelink 备份）' : '⚠️ figma-developer-mcp 未全局安装（npm install -g figma-developer-mcp，Framelink 备份需要）');
 
-  check('4c. Framelink 命令可用 + f2c 在配置中', !!framelinkCmd && f2cPresent,
-    (!framelinkCmd ? '⚠️ figma-developer-mcp 命令未全局安装（npm install -g figma-developer-mcp）；' : '✅ figma-developer-mcp 在 PATH；')
-    + (!f2cPresent ? '⚠️ f2c-mcp 未配置（绕开 Figma REST 限流需要它）；' : '✅ f2c-mcp 已配置（绕开限流）。')
-    + (framelinkCmd && f2cPresent ? '双 MCP 就位' : ''));
+  const cmdOk = (!anyHasTalkToFigma || !!bunCmd) && (!pathResults.some(r => r.hasFramelink) || !!framelinkCmd);
+  check('4c. MCP 启动命令可用', cmdOk, parts.join('；') || '无已配置 MCP 需要的启动命令');
 }
 
 // ---------- 5. hook 脚本 ----------
