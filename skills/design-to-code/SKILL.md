@@ -28,7 +28,8 @@ description: 把 Figma 设计稿或 UI 截图还原成前端代码时使用。�
 3. 运行 cursor-talk-to-figma-mcp 插件，join 一个 channel（如 `talk-to-figma`）
 
 1. **取源** — 用户提供截图 + Figma 里选中的节点 **或** Figma 链接（含 nodeId）。两种方式都支持：
-   - 模型先调 TalkToFigma 的 `join_channel(channel_name)` 连接 Figma 插件
+   - 模型先调 TalkToFigma 的 `join_channel` 连接 Figma 插件——**注意参数名是 `channel`，不是 `channel_name`**：`join_channel({ channel: "talk-to-figma" })`
+   - 如果 `join_channel` 返回 "Please provide a channel name" 说明参数名错了，改用 `{ channel: "..." }` 重试
    - **方式 A（选中 frame）**：调 `read_my_design` 读取当前选中节点的完整节点树数据
    - **方式 B（给链接）**：从 URL 提取 nodeId（`?node-id=14669-9900` → `14669:9900`，破折号换冒号），调 `get_node_info(nodeId)` 读单个节点、或 `get_nodes_info(nodeIds[])` 批量读多节点。不需在 Figma 里选中
    - 备选：调 `export_node_as_image(nodeId, format)` **截图能力**——可以导出任意节点为 PNG/SVG，作为"节点内截图"（不再需要用户手动截）。
