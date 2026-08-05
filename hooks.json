@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .agents/plugins/design-to-code/scripts/dtc-hook.js",
+            "command": "node scripts/dtc-hook.js",
             "timeout": 10
           }
         ]
