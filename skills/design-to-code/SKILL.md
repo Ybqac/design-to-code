@@ -40,6 +40,10 @@ description: 把 Figma 设计稿或 UI 截图还原成前端代码时使用。�
 3. **视觉读图** — 看截图（用户给的或 TalkToFigma `export_node_as_image` 导出的），**只输出结构化布局描述**（父子嵌套、视觉分组、对齐、相对间距、层级关系），**不要给精确像素**——这是 ground-truth 的事。结构化描述示例见 `references/fusion-protocol.md`。
 4. **fusion 融合（两阶段，强制用户确认闸口）** —
    - **4a. 输出结构描述给用户确认**：按 `references/fusion-protocol.md` 处理冲突（结构与布局听截图、数值听 ground-truth），输出**结构化布局描述 YAML**（父子嵌套 + 语义角色 + 相对间距 + 冲突仲裁标注），**不生成代码**。明确告诉用户："这是融合后的结构，确认对了再生成代码。"
+     - **关键：YAML 必须内嵌 ground-truth 的具体数值，不能笼统描述**。例如：
+       - ❌ 错误（笼统）：`{ type: progress-bar, style: gradient }` — 模型生成代码时不知道用什么颜色、什么尺寸
+       - ✅ 正确（数值绑定）：`{ type: progress-bar, nodeId: "14478:9778", track_gradient: "#00feff→#8decff→#e9e0ff", active_node: ellipse 15.8×16 fill #ffffff stroke #02f6f7, inactive_nodes: [ellipse 8×8 #f2f2f2 ×3] }` — 模型生成代码时直接从 YAML 取值
+     - **每个视觉元素**（卡片、按钮、进度条、badge、输入框等）的 YAML 节点必须包含：nodeId + fills/strokes 颜色值 + 尺寸（width/height）+ cornerRadius + typography（fontSize/fontWeight/fontFamily）—— 这些值从 ground-truth.json 的 raw_styles 对应条目取
      - **重要**：如果目标目录已存在旧 HTML/代码（如之前的测试输出），**必须先告诉用户"目录有旧代码，建议清空或换新目录"**，不要在旧代码上打补丁——打补丁会绕过 fusion 结构重写，重复 f2c 残留的布局错误。等用户确认目录处理方式后再继续。
    - **4b. 用户确认后才生成代码**：用户回复"结构对了"或确认后，模型基于确认的结构 + ground-truth.json 数值，**自己写出代码**。数值优先从 ground-truth.json 取（注释 `/* from nodeId */`）；不在 ground-truth 的标"截图估读"。
    - **为什么强制两阶段**：实测证明模型会声称"已按截图 fusion 修复"但代码实际是 f2c 原样输出，或读旧代码走打补丁路径。强制 4a 输出结构描述让"假融合"被当场识破——代码可以对不上截图，但结构描述必须先过用户的眼。
