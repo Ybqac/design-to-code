@@ -13,19 +13,35 @@
 
 ground-truth 只服务"反捏造四红线"里的第四条（禁凭空数值），其余三条（禁占位图/禁凭空文案/禁新造组件）与 ground-truth 无关。
 
-## 如何导出 design-ground-truth.json
+## 如何导出 design-ground-truth.json + raw-node-snapshot.json
 
-用 TalkToFigma MCP 的 `read_my_design` 工具取原始节点树，直接填进 ground-truth：
+用 TalkToFigma MCP 的 `read_my_design` 工具取原始节点树，**同时落盘两份文件**：
 
 ```
-1. TalkToFigma MCP：调 join_channel(channel_name) → 连接 Figma 插件（前置条件）
-2. TalkToFigma MCP：调 read_my_design → 读取当前选中节点的完整节点树
-   - 返回 JSON 含 fills[] / strokes[] / characters / style / absoluteBoundingBox / cornerRadius / children
-   - 每个 TEXT 节点的 characters 是真实文案（直接填入代码，不用靠截图估读）
-   - 每个 FRAME/INSTANCE 的 absoluteBoundingBox 含 width/height（精确尺寸）
-3. 兜底：调 get_node_info(nodeId) 取单个节点、调 get_nodes_info(nodeIds[]) 批量取
-4. 更兜底：当 TalkToFigma 不可用时，用 Framelink get_figma_data(fileKey, nodeId)（受 Figma REST 限流，会 429）
+1. TalkToFigma MCP：调 join_channel → 连接 Figma 插件（前置条件）
+2. TalkToFigma MCP：调 read_my_design / get_node_info → 读取节点树
+3. 落盘 raw-node-snapshot.json：TalkToFigma 返回的原始 JSON 原样保存，不做任何加工
+   - 这是溯源基准——ground-truth 的每个值都必须能在这份文件里找到出处
+4. 落盘 design-ground-truth.json：从 raw-node-snapshot.json 整理出 tokens + raw_styles
+   - raw_styles 必须 >20% 覆盖率（如 346 个节点至少填 70 条）
+   - tokens 的每个值必须从 raw-node-snapshot.json 里能找到出处
+   - 绝对不允许从生成的代码反向补录值进 ground-truth
+5. 兜底：当 TalkToFigma 不可用时，用 Framelink get_figma_data(fileKey, nodeId)（受 Figma REST 限流）
 ```
+
+## 溯源校验（防反向补录伪造）
+
+生成代码后，跑两道校验：
+
+1. `verify-ground-truth.js <code-dir> <ground-truth.json>` — 扫生成代码的数值是否在 ground-truth 里有出处
+2. `verify-gt-provenance.js <ground-truth.json> <raw-node-snapshot.json>` — 拿 ground-truth 和原始节点树快照逐一核对，**抓反向补录伪造**：
+   - tokens.colors 的每个值必须在节点树 fills/strokes 里能找到
+   - tokens.typography 的每个 fontSize 必须在节点树 style.fontSize 里能找到
+   - tokens.spacing / radius 同理
+   - raw_styles 覆盖率必须 >20%
+   - raw_styles 的每个 nodeId 必须在节点树里存在
+
+第二道校验是关键——之前模型会"先写 CSS，再把 CSS 值反向塞进 ground-truth 骗过第一道校验"。第二道拿原始节点树做基准，反向补录的值在节点树里找不到出处，会被 FORGED 标红。
 
 **TalkToFigma 的 `read_my_design` 返回的是原始 Figma 节点数据**（不是转码后的代码，也不是简化后的摘要），可以直接机械填入 raw_styles，**不需要从代码反推**。
 

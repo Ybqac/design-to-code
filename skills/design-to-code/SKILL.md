@@ -34,15 +34,20 @@ description: 把 Figma 设计稿或 UI 截图还原成前端代码时使用。�
    - **方式 B（给链接）**：从 URL 提取 nodeId（`?node-id=14669-9900` → `14669:9900`，破折号换冒号），调 `get_node_info(nodeId)` 读单个节点、或 `get_nodes_info(nodeIds[])` 批量读多节点。不需在 Figma 里选中
    - 备选：调 `export_node_as_image(nodeId, format)` **截图能力**——可以导出任意节点为 PNG/SVG，作为"节点内截图"（不再需要用户手动截）。
    - 只有截图没 Figma 访问：跳到第 3 步，并按需读 `references/fallback-bitmap-only.md`
-2. **导出 ground truth** — 把 `read_my_design` 返回的原始节点树数据**整理成** `design-ground-truth.json`。**关键：raw_styles 必须逐节点生成（不止 1 条）**，每条从节点树直接填：`nodeId`（真实 Figma 纯数字冒号格式）+ `role`（card/button/text/...）+ `fills[role=background/shadow]` + `strokes[role=border/divider]` + `width`/`height`（从 `absoluteBoundingBox` 取）+ `cornerRadius` + `textColor`/`textStyle`（TEXT 节点）。**不再需要从代码反推**——原始节点数据直接含 fills/strokes/typography/boundingBox，模型机械填入即可。nodeId 不接受 `:purple` 英文后缀。详见 `references/ground-truth-lock.md` 和 `templates/ground-truth.schema.json`。
+2. **导出 ground truth + 原始节点树快照** — 把 `read_my_design` / `get_node_info` 返回的原始节点树数据**同时落盘两份文件**：
+   - `raw-node-snapshot.json`：TalkToFigma 返回的**原始 JSON 原样保存**，不做任何加工。这是溯源基准——后续所有 ground-truth 值都必须能在这份文件里找到出处
+   - `design-ground-truth.json`：从原始节点树**整理**出 tokens + raw_styles。**关键：raw_styles 必须逐节点生成，覆盖率 >20%**。每条从节点树直接填：`nodeId`（真实 Figma 纯数字冒号格式）+ `role` + `fills[role]` + `strokes[role]` + `width`/`height` + `cornerRadius`。**绝对不允许从生成的代码反向补录值进 ground-truth**——tokens 的每个值必须在 raw-node-snapshot.json 里有出处。详见 `references/ground-truth-lock.md` 和 `templates/ground-truth.schema.json`。
 3. **视觉读图** — 看截图（用户给的或 TalkToFigma `export_node_as_image` 导出的），**只输出结构化布局描述**（父子嵌套、视觉分组、对齐、相对间距、层级关系），**不要给精确像素**——这是 ground-truth 的事。结构化描述示例见 `references/fusion-protocol.md`。
 4. **fusion 融合（两阶段，强制用户确认闸口）** —
    - **4a. 输出结构描述给用户确认**：按 `references/fusion-protocol.md` 处理冲突（结构与布局听截图、数值听 ground-truth），输出**结构化布局描述 YAML**（父子嵌套 + 语义角色 + 相对间距 + 冲突仲裁标注），**不生成代码**。明确告诉用户："这是融合后的结构，确认对了再生成代码。"
      - **重要**：如果目标目录已存在旧 HTML/代码（如之前的测试输出），**必须先告诉用户"目录有旧代码，建议清空或换新目录"**，不要在旧代码上打补丁——打补丁会绕过 fusion 结构重写，重复 f2c 残留的布局错误。等用户确认目录处理方式后再继续。
    - **4b. 用户确认后才生成代码**：用户回复"结构对了"或确认后，模型基于确认的结构 + ground-truth.json 数值，**自己写出代码**。数值优先从 ground-truth.json 取（注释 `/* from nodeId */`）；不在 ground-truth 的标"截图估读"。
    - **为什么强制两阶段**：实测证明模型会声称"已按截图 fusion 修复"但代码实际是 f2c 原样输出，或读旧代码走打补丁路径。强制 4a 输出结构描述让"假融合"被当场识破——代码可以对不上截图，但结构描述必须先过用户的眼。
-5. **下载真实素材** — 调 TalkToFigma 的 `export_node_as_image(nodeId, format="SVG")` 或 `format="PNG"` 把截图里看到的图标/图片导出，存到项目约定目录（`assets/`、`public/figma-assets/`）。**不要用 picsum/placeholder**——这是反捏造红线 #1 的正解。Framelink 的 `download_figma_images` 也可用（但受 REST 限流），TalkToFigma 的 `export_node_as_image` 不受限流。
-6. **校验护栏** — 跑 `scripts/verify-ground-truth.js` 列未匹配值清单（含 INTEGRITY_FAIL 防伪造检查）；对照 `references/anti-fabrication.md` 自查占位图/硬编码文案/臆造组件。
+5. **下载真实素材** — 对节点树里**每个**含 IMAGE fill 的节点、每个 INSTANCE 类型节点、每个 VECTOR 类型节点，逐一调 TalkToFigma 的 `export_node_as_image(nodeId, format="SVG")` 或 `format="PNG"` 导出，存到项目约定目录（`assets/`、`public/figma-assets/`）。**不要用通用 inline SVG 替代真实素材**——这是反捏造红线 #1 的正解。Framelink 的 `download_figma_images` 也可用（但受 REST 限流），TalkToFigma 的 `export_node_as_image` 不受限流。
+6. **校验护栏** — 跑两道校验：
+   - `scripts/verify-ground-truth.js` — 扫生成代码的数值是否在 ground-truth.json 里有出处（含 INTEGRITY_FAIL 检查 raw_styles 条数、nodeId 格式、via 字段）
+   - `scripts/verify-gt-provenance.js` — 拿 ground-truth.json 和 raw-node-snapshot.json 逐一核对每个值是否在原始节点树里有出处（防反向补录伪造）
+   - 对照 `references/anti-fabrication.md` 自查占位图/硬编码文案/臆造组件
 7. **回环验证** — headless 渲染生成页 → 与截图视觉 diff → 不一致回到第 4a 步。
 
 ## MCP 选择
