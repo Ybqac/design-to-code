@@ -13,6 +13,7 @@
  *   4c. MCP 启动命令可用（bun for TalkToFigma，figma-developer-mcp for Framelink）
  *   5. hook 脚本 dtc-hook.js（占位图/lorem 能拦、正常能放行）
  *   6. verify 脚本 verify-ground-truth.js（UNMATCHED/PENDING/OK 三态）
+ *   7. verify 脚本 verify-yaml-provenance.js（FORGED/OK 两态）
  *
  * 退出码：全部通过 0，有失败 1。
  */
@@ -46,6 +47,10 @@ function checkFiles() {
     'scripts/selfcheck.js',
     'skills/design-to-code/SKILL.md',
     'skills/design-to-code/scripts/verify-ground-truth.js',
+    'skills/design-to-code/scripts/verify-yaml-provenance.js',
+    'skills/design-to-code/scripts/verify-gt-provenance.js',
+    'skills/design-to-code/scripts/verify-yaml-provenance.js',
+    'skills/design-to-code/scripts/verify-gt-provenance.js',
     'skills/design-to-code/references/fusion-protocol.md',
     'skills/design-to-code/references/anti-fabrication.md',
     'skills/design-to-code/references/ground-truth-lock.md',
@@ -255,6 +260,47 @@ function checkVerify() {
   try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
 }
 
+// ---------- 7. verify-yaml-provenance 脚本 ----------
+function checkYamlProvenance() {
+  const script = path.join(PLUGIN_ROOT, 'skills', 'design-to-code', 'scripts', 'verify-yaml-provenance.js');
+  if (!fs.existsSync(script)) { check('7. verify-yaml-provenance 脚本', false, 'verify-yaml-provenance.js 不存在'); return; }
+
+  const tmpDir = path.join(os.tmpdir(), `dtc-yaml-prov-${Date.now()}`);
+  fs.mkdirSync(tmpDir, { recursive: true });
+
+  // 节点树：真实颜色 #ffffff + 尺寸 40
+  fs.writeFileSync(path.join(tmpDir, 'snapshot.json'), JSON.stringify({
+    id: '1:1',
+    fills: [{ color: '#ffffff' }],
+    absoluteBoundingBox: { width: 40, height: 40 },
+    children: [],
+  }));
+
+  // 伪造 YAML：含节点树里没有的颜色
+  fs.writeFileSync(path.join(tmpDir, 'spec.yaml'), `layout:
+  root:
+    fill: "#F5F5F5"
+    height: 52px
+`);
+
+  let out, exitCode = 0;
+  try {
+    out = execFileSync('node', [script, path.join(tmpDir, 'spec.yaml'), path.join(tmpDir, 'snapshot.json')], { encoding: 'utf8', timeout: 5000 });
+  } catch (e) {
+    out = e.stdout || '';
+    exitCode = e.status || 1;
+  }
+
+  const hasForged = /FORGED/.test(out) && /#f5f5f5/i.test(out);
+  const exitCorrect = exitCode !== 0;
+
+  check('7. verify-yaml-provenance FORGED 识别',
+    hasForged && exitCorrect,
+    `FORGED=${hasForged}, exit=${exitCode}（应为非0）`);
+
+  try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+}
+
 // ---------- 主流程 ----------
 console.log('=== design-to-code plugin 自检 ===');
 console.log(`plugin 路径: ${PLUGIN_ROOT}\n`);
@@ -265,6 +311,7 @@ checkAntigravityEnv();
 checkMcp();
 checkHook();
 checkVerify();
+checkYamlProvenance();
 
 // 输出
 let pass = 0, fail = 0;

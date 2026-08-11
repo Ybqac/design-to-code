@@ -29,7 +29,21 @@ ground-truth 只服务"反捏造四红线"里的第四条（禁凭空数值）�
 5. 兜底：当 TalkToFigma 不可用时，用 Framelink get_figma_data(fileKey, nodeId)（受 Figma REST 限流）
 ```
 
-## 溯源校验（防反向补录伪造）
+## 溯源校验（防反向补录伪造 + 4a YAML 编值）
+
+### 4a 阶段：YAML 溯源（`verify-yaml-provenance.js`）
+
+4a 输出 `fusion-layout-spec.yaml` 后、展示给用户确认前，**必须先跑**：
+
+```bash
+node scripts/verify-yaml-provenance.js <fusion-layout-spec.yaml> <raw-node-snapshot.json>
+```
+
+脚本解析 YAML 里所有 hex 颜色 + px/尺寸数值，逐一核验是否在 raw-node-snapshot.json 的 fills/strokes/boundingBox 里有出处。有编的值 → `[FORGED]` 报红、退出码 1，**修正 YAML 重跑通过后才能进 4b**。
+
+实测：模型在 4a 写 YAML 时 11 个颜色里 10 个是编的（如 `#06B6D4`/`#F5F5F5`），只有 `#FF4D4F` 是真的。软约束挡不住，这道机械闸口才是 4a 硬门槛。
+
+### 第 6 步：ground-truth + 代码溯源
 
 生成代码后，跑两道校验：
 

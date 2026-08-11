@@ -84,7 +84,7 @@ Framelink（受 Figma REST 限流，TalkToFigma 不可用时的备份）：
 1. **取源** — TalkToFigma `join_channel` + `read_my_design`（或 `get_node_info`）取原始节点树
 2. **导出 ground truth** — 从节点树直接填 `design-ground-truth.json`（fills/strokes/typography/坐标，逐节点）
 3. **视觉读图** — 只输出结构化布局描述（父子嵌套/对齐/分组，不给像素）
-4. **fusion 融合**（两阶段）— 4a 输出结构描述待用户确认 → 4b 确认后生成代码
+4. **fusion 融合**（两阶段）— 4a 输出结构描述 + `verify-yaml-provenance.js` 机械校验通过 → 用户确认 → 4b 生成代码
 5. **下载真实素材** — `export_node_as_image` 导出图标/图片，不用占位图
 6. **校验护栏** — `verify-ground-truth.js` 扫数值出处 + INTEGRITY_FAIL 防伪造
 7. **回环验证** — headless 渲染 → 与截图 diff → 不一致回到 4a
@@ -92,7 +92,7 @@ Framelink（受 Figma REST 限流，TalkToFigma 不可用时的备份）：
 ### 关键约束
 
 - **反捏造四红线**：禁占位图 URL · 禁凭空文案 · 禁新造 design-system 之外组件 · 禁凭空数值
-- **4a 闸口强制**：模型必须先输出结构描述待你确认，不直接生成代码
+- **4a 闸口强制**：模型必须先输出结构描述，`verify-yaml-provenance.js` 校验 YAML 数值无伪造后待你确认，不直接生成代码
 - **f2c 不直接用**：f2c 输出布局常混乱，仅作可选参考
 
 ## 验证
@@ -101,8 +101,12 @@ Framelink（受 Figma REST 限流，TalkToFigma 不可用时的备份）：
 # 一键自检（13 项：文件完整性 / Node / Antigravity 环境 / MCP / bun / hook / verify）
 node ~/.gemini/config/plugins/design-to-code/scripts/selfcheck.js
 
-# 数值校验 + 防伪造
+# 4a YAML 溯源校验（抓模型编值）
+node ~/.gemini/config/plugins/design-to-code/skills/design-to-code/scripts/verify-yaml-provenance.js <fusion-layout-spec.yaml> <raw-node-snapshot.json>
+
+# 6. 代码数值校验 + ground-truth 防伪造
 node ~/.gemini/config/plugins/design-to-code/skills/design-to-code/scripts/verify-ground-truth.js <code-dir> <ground-truth.json>
+node ~/.gemini/config/plugins/design-to-code/skills/design-to-code/scripts/verify-gt-provenance.js <ground-truth.json> <raw-node-snapshot.json>
 ```
 
 ## 目录结构
@@ -115,7 +119,10 @@ design-to-code/
 ├── skills/design-to-code/            skill 本体
 │   ├── SKILL.md                      主入口（7 步流程 + 资源索引）
 │   ├── references/                   7 份细分规则
-│   ├── scripts/verify-ground-truth.js
+│   ├── scripts/
+│   │   ├── verify-yaml-provenance.js   # 4a YAML 溯源校验
+│   │   ├── verify-ground-truth.js      # 6. 代码数值校验
+│   │   └── verify-gt-provenance.js     # 6. ground-truth 溯源校验
 │   └── templates/                    Antigravity 专属配置模板
 ├── rules/design-to-code.md           workspace rule（设 Always On）
 └── scripts/
