@@ -36,7 +36,23 @@ raw_styles 每条（每节点一条，含 VECTOR 存根）：
 - `width/height` → `width: 312px; height: 44px`
 代码注释 `/* from 14669:1005 */`。`dtc check` 会核对这个值确实在 gt 里。
 
-## 溯源校验（仍保留，防篡改）
+## 溯源校验（三层，防编值/防篡改/防伪造）
+
+### 4a 阶段：结构 YAML 溯源（`scripts/verify-yaml-provenance.js`）
+
+4a 输出 `fusion-layout-spec.yaml` 后、展示给用户确认前**必须先跑**：
+
+```bash
+node skills/design-to-code/scripts/verify-yaml-provenance.js <fusion-layout-spec.yaml> .dtc/raw-node-snapshot.json
+```
+
+脚本解析 YAML 里所有 hex 颜色 + px/尺寸数值，逐一核验是否在原始节点树里有出处。编的值 `[FORGED]` 报红、退出码 1，**修正重跑通过后才能进生成阶段**。实测：模型在 4a 写 YAML 时 11 个颜色里 10 个是编的（如 `#06B6D4`/`#F5F5F5`，节点树里根本没有）——软约束挡不住，这道机械闸口才是 4a 的硬门槛。
+
+### 第 5 步：验证环归因（dtc verify，自动）
+
+差异热区的"期望值"直接取自本文件，与 DOM 探针实际值并排写进 fix-prompt——修复时对号入座。
+
+### 第 6 步：ground-truth + 代码溯源（dtc check）
 
 `dtc check <code-dir>` 内置两道：
 1. **代码扫描**：硬编码颜色/尺寸逐个反查 gt（含 Tailwind 任意值 `bg-[#xxx]`、CSS、inline style），未命中且无"估读"注释 → UNMATCHED。

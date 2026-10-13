@@ -89,7 +89,7 @@ packages/cli    dtc 命令 + TalkToFigma relay ws 客户端（协议逆向自 so
 packages/mcp    stdio MCP server（doctor/extract/verify/read_report/fix_prompt/check）
 plugin/src      增强版 Figma 插件源码（单源）；plugin/build 三形态由 dtc plugin build 产出
 integrations/   cursor / claude-code / generic 宿主物料
-skills/         方法论层（fusion 协议、反捏造、ground-truth 机制、目标栈细则）
+skills/         方法论层（fusion 协议、反捏造、ground-truth 机制、4a YAML 溯源脚本、目标栈细则）
 e2e/            合成端到端（extract→缺陷验证→收敛→check 全链路断言）
 docs/           附录（console-injection 应急版）
 ```
