@@ -58,7 +58,7 @@ dtc plugin install
 
 | 形态 | 文件 | 安装方式 |
 |---|---|---|
-| Chromium 扩展 | `plugin/build/dtc-bridge-chrome-extension.zip` | 打开 `chrome://extensions`（Edge 为 `edge://extensions`）→ 开启「开发者模式」→ Chrome 拖入 `plugin/build/chrome-extension` 文件夹或点「加载已解压的扩展程序」（zip 需先解压）；Edge 多数版本可直接拖入 zip。无需安装其他扩展管理器 |
+| Chromium 扩展 | `plugin/build/dtc-bridge-chrome-extension.zip` | 解压 zip 得到 `chrome-extension` 文件夹 → 打开 `chrome://extensions` → 开启「开发者模式」→ 将文件夹拖入扩展页（或点「加载已解压的扩展程序」选择该文件夹）。无需安装其他扩展管理器，也不需要"打包扩展程序"（.crx 面向商店分发，本地安装会被 Chrome 拦截） |
 | 桌面 App 插件 | `plugin/build/desktop/manifest.json` | Figma 桌面 App → Plugins → Development → Import plugin from manifest |
 | 浏览器用户脚本 | `plugin/build/web/dtc-bridge.user.js` | 安装 Tampermonkey 扩展后，将文件拖入浏览器窗口 |
 | 书签 | `plugin/build/web/dtc-bridge.bookmarklet.html` | 浏览器打开该页，将「▶ dtc bridge」拖到书签栏（每次刷新后需重新点击） |

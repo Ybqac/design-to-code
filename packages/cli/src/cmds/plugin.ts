@@ -214,13 +214,13 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:4px}</style>
 
 ## 首选：Chromium 扩展（无需任何额外扩展管理器）
 产物：\`../dtc-bridge-chrome-extension.zip\`（源目录 \`../chrome-extension/\`）
-1. 打开 \`chrome://extensions\`（Edge 为 \`edge://extensions\`）。
-2. 右上角打开「开发者模式」。
-3. Chrome：把 \`chrome-extension\` **文件夹**拖进扩展页（或「加载已解压的扩展程序」选择该文件夹；
-   zip 需先解压）。Edge：多数版本可直接把 **zip 拖入**扩展页。
+1. 解压 zip 得到 chrome-extension 文件夹。
+2. 打开 \`chrome://extensions\`，开启「开发者模式」。
+3. 把文件夹拖入扩展页，或点「加载已解压的扩展程序」选择该文件夹。
 4. 打开 figma.com 设计文件，右上角绿色角标 \`dtc: ✅ channel dtc 已就绪\` 即成功
    （角标可点击切换 channel；断线自动重连；relay 需先启动 \`bun socket\`）。
 注意：开发者模式安装的扩展，Chrome 启动时可能提示「关闭开发者模式扩展」——选择保留即可。
+不需要用「打包扩展程序」按钮：它生成 .crx（商店分发格式），本地 .crx 会被 Chrome 拦截。
 
 ## 备选 1：用户脚本（Tampermonkey）
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 浏览器扩展（一次）。
@@ -259,10 +259,10 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:4px}</style>
 📦 安装指引（channel 默认 dtc，与 dtc extract --channel 一致）
 
 [浏览器·首选] Chromium 扩展（无需 Tampermonkey）
-  1. 打开 chrome://extensions（Edge: edge://extensions），开「开发者模式」
-  2. Chrome 拖入 ${path.join(distDir, "chrome-extension")} 文件夹（或"加载已解压的扩展程序"）；
-     Edge 可直接拖 ${zipPath}
-  3. 打开 Figma 设计文件 → 右上角绿色角标即就绪
+  1. 解压 ${zipPath} 得到 chrome-extension 文件夹
+  2. 打开 chrome://extensions，开「开发者模式」
+  3. 把文件夹拖入扩展页（或点「加载已解压的扩展程序」选择它）
+  4. 打开 Figma 设计文件 → 右上角绿色角标即就绪
      （Chrome 启动提示"关闭开发者模式扩展"时选择保留）
 
 [浏览器·备选] 用户脚本 / 书签
