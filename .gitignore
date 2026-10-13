@@ -20,3 +20,6 @@ raw-node-snapshot.json
 missing-assets.md
 pending-review.md
 plugin/build/
+e2e/.bad-code/
+e2e/.good-code/
+e2e/.dtc/
