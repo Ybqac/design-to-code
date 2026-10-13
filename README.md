@@ -54,13 +54,14 @@ cd ~/code/cursor-talk-to-figma-mcp && bun socket   # 监听 ws://localhost:3055
 dtc plugin install
 ```
 
-三种形态任选：
+四种形态任选：
 
 | 形态 | 文件 | 安装方式 |
 |---|---|---|
+| Chromium 扩展 | `plugin/build/dtc-bridge-chrome-extension.zip` | 打开 `chrome://extensions`（Edge 为 `edge://extensions`）→ 开启「开发者模式」→ Chrome 拖入 `plugin/build/chrome-extension` 文件夹或点「加载已解压的扩展程序」（zip 需先解压）；Edge 多数版本可直接拖入 zip。无需安装其他扩展管理器 |
 | 桌面 App 插件 | `plugin/build/desktop/manifest.json` | Figma 桌面 App → Plugins → Development → Import plugin from manifest |
 | 浏览器用户脚本 | `plugin/build/web/dtc-bridge.user.js` | 安装 Tampermonkey 扩展后，将文件拖入浏览器窗口 |
-| 书签 | `plugin/build/web/dtc-bridge.bookmarklet.html` | 浏览器打开该页，将「▶ dtc bridge」拖到书签栏 |
+| 书签 | `plugin/build/web/dtc-bridge.bookmarklet.html` | 浏览器打开该页，将「▶ dtc bridge」拖到书签栏（每次刷新后需重新点击） |
 
 装好后打开 Figma 文件，连接插件（channel 默认 `dtc`，与 CLI 参数一致；用户脚本版右上角角标可切换 channel）。
 
@@ -141,7 +142,7 @@ packages/core   核心库：节点树归一化 / ground-truth 生成 / spec / �
 packages/cli    dtc 命令行（extract/verify/check/plugin/doctor）+ relay WebSocket 客户端
 packages/mcp    stdio MCP server
 plugin/src      Figma 插件源码（fork of grab/cursor-talk-to-figma-mcp，富字段版）；
-                plugin/build/ 由 dtc plugin build 产出三形态
+                plugin/build/ 由 dtc plugin build 产出四形态（desktop / chrome 扩展 zip / user.js / 书签）
 integrations/   cursor / claude-code / generic 宿主接入物料
 skills/         方法论：fusion 仲裁规则、反捏造红线、ground-truth 机制、4a YAML 溯源、目标栈细则
 e2e/            端到端测试
