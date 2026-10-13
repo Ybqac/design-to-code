@@ -114,23 +114,45 @@ export async function runPlugin(action: string, opts: PluginOptions): Promise<vo
   };
   function setBadge(text, color) { badge.textContent = text; badge.style.background = color; }
   (document.body || document.documentElement).appendChild(badge);
-  setBadge("dtc: 检测中…", "#6b7280");
+  setBadge("dtc: 等待编辑器加载…", "#6b7280");
 
-  if (typeof figma === "undefined" || !figma || typeof figma.showUI !== "function") {
-    setBadge("dtc: ❌ 页面无 figma 对象", "#ef4444");
-    console.error("[dtc-bridge] 当前页面上下文没有 figma 插件全局对象。请确认已打开具体设计文件（figma.com/design/...）后刷新；若仍失败，改用桌面 App 开发插件或参考 plugin/build/web/README.md。");
-    return;
-  }
-  try {
+  // Figma 文件加载可达 30s+，window.figma 在编辑器就绪后才出现——轮询等待而非一次性判定
+  var WAIT_MAX = 120;
+  var waited = 0;
+  var timer = setInterval(function () {
+    waited += 1;
+    if (typeof figma !== "undefined" && figma) {
+      clearInterval(timer);
+      if (typeof figma.showUI === "function") {
+        tryInject();
+      } else {
+        setBadge("dtc: ⚠️ figma 在但无 showUI", "#f59e0b");
+        console.warn("[dtc-bridge] window.figma 已出现但缺少 showUI 方法。实际可用键:", Object.keys(figma).slice(0, 40).join(", "));
+        console.warn("[dtc-bridge] 把上面这行键名列表反馈到 dtc 仓库issue，便于适配该 Figma 版本。");
+      }
+      return;
+    }
+    if (waited >= WAIT_MAX) {
+      clearInterval(timer);
+      setBadge("dtc: ❌ " + WAIT_MAX + "s 未等到 figma", "#ef4444");
+      console.error("[dtc-bridge] " + WAIT_MAX + " 秒内 window.figma 未出现。当前 URL:", location.href);
+      return;
+    }
+    if (waited % 5 === 0) setBadge("dtc: 等待编辑器加载 " + waited + "s…", "#6b7280");
+  }, 1000);
+
+  function tryInject() {
+    try {
 ${payload
   .split("\n")
-  .map((l) => "    " + l)
+  .map((l) => "      " + l)
   .join("\n")}
-    setBadge("dtc: ✅ channel " + ((localStorage.getItem("dtc:channel") || "dtc")) + " 已就绪", "#22c55e");
-    console.log("[dtc-bridge] 注入完成：channel=" + (localStorage.getItem("dtc:channel") || "dtc") + "，relay=ws://localhost:3055（先 bun socket）");
-  } catch (e) {
-    setBadge("dtc: ❌ 注入失败 " + (e && e.message), "#ef4444");
-    console.error("[dtc-bridge] 注入失败:", e);
+      setBadge("dtc: ✅ channel " + ((localStorage.getItem("dtc:channel") || "dtc")) + " 已就绪", "#22c55e");
+      console.log("[dtc-bridge] 注入完成：channel=" + (localStorage.getItem("dtc:channel") || "dtc") + "，relay=ws://localhost:3055（先 bun socket）");
+    } catch (e) {
+      setBadge("dtc: ❌ 注入失败 " + (e && e.message), "#ef4444");
+      console.error("[dtc-bridge] 注入失败:", e);
+    }
   }
 })();
 `;
