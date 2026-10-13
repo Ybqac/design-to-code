@@ -39,7 +39,9 @@ dtc doctor ──► dtc extract ──► 【人工闸口】结构确认 ──
 cd ~/code/design-to-code-plugin
 npm install && npm run build
 npx playwright install chromium
-npm link --workspace @dtc/cli   # 全局注册 dtc 命令（经 npm 全局 bin，所有终端可用）
+
+# 全局注册 dtc 命令（注意：npm link 不支持 --workspace 参数，需进入包目录执行）
+cd packages/cli && npm link && cd ../..
 ```
 
 > 若后续拉取了新代码：重新 `npm run build` 即可，`dtc` 命令自动指向最新构建，无需重新 link。
