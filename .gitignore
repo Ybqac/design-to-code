@@ -5,12 +5,18 @@ Thumbs.db
 # Editor
 .vscode/
 .idea/
+.cursor/
 
-# Node（verify-ground-truth.js 零依赖，但留个标准 gitignore 以防扩展）
+# Node
 node_modules/
+dist/
+*.tsbuildinfo
 *.log
 
-# 本地校验产物
+# dtc 运行产物（.dtc/ 规格包与验证报告，随项目可自行决定是否提交）
+.dtc/
 design-ground-truth.json
+raw-node-snapshot.json
 missing-assets.md
 pending-review.md
+plugin/build/

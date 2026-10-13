@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<style>
+  /* 实现页（故意埋了 5 处缺陷，验证环必须全部抓到）：
+     1. 标题字号 18px（期望 20px）      → 结构校验 fontSize
+     2. 按钮颜色 #60A5FA（期望 #3B82F6） → 像素 diff + 归因 14669:1005
+     3. 输入框圆角 20px（期望 8px）      → 像素 diff + 归因 14669:1003
+     4. 卡片无阴影（期望 0 4 12 rgba(0,0,0,.16)）→ 边缘 diff + 归因 14669:9900
+     5. 链接颜色 #3B82F6（期望 #2563EB）  → 像素 diff + 归因 14669:1007
+  */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { width: 360px; height: 640px; font-family: Inter, "PingFang SC", "Helvetica Neue", sans-serif; background: #FFFFFF; }
+  .card { position: relative; width: 360px; height: 640px; background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 12px; overflow: hidden; }
+  .title { position: absolute; left: 24px; top: 24px; width: 312px; color: #111827; font-size: 18px; font-weight: 600; line-height: 28px; }
+  .subtitle { position: absolute; left: 24px; top: 68px; width: 312px; color: #6B7280; font-size: 14px; font-weight: 400; line-height: 20px; }
+  .email { position: absolute; left: 24px; top: 104px; width: 312px; height: 44px; background: #F9FAFB; border: 1px solid #D1D5DB; border-radius: 20px; padding-left: 12px; }
+  .email span { display: block; margin-top: 11px; color: #9CA3AF; font-size: 14px; line-height: 20px; }
+  .btn { position: absolute; left: 24px; top: 164px; width: 312px; height: 44px; background: #60A5FA; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+  .btn span { color: #FFFFFF; font-size: 14px; font-weight: 500; line-height: 20px; }
+  .link { position: absolute; left: 24px; top: 224px; color: #3B82F6; font-size: 13px; line-height: 18px; }
+  .close { position: absolute; left: 332px; top: 20px; width: 16px; height: 16px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="title">欢迎回来</div>
+    <div class="subtitle">请登录你的账号</div>
+    <div class="email"><span>you@example.com</span></div>
+    <div class="btn"><span>登录</span></div>
+    <div class="link">忘记密码？</div>
+    <svg class="close" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="#111827" stroke-width="1.5"/></svg>
+  </div>
+</body>
+</html>

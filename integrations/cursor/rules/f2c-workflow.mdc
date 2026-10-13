@@ -1,0 +1,26 @@
+---
+description: Figma 设计稿还原代码时的闭环工作流规则（dtc 工具链：提取→结构确认→生成→验证环→反捏造校验）。当 .dtc/ 目录存在、或任务涉及 Figma/设计稿还原时应用。
+globs:
+alwaysApply: false
+---
+
+# F2C 闭环工作流（dtc 工具链）
+
+## 分工原则
+- **确定性的事交给工具**：节点树/数值/素材/参考图由 `dtc extract` 落盘，不要手工调 Figma MCP 重抄。
+- **AI 只做工具做不了的**：布局语义选择、组件划分、交互状态、把 spec 翻译成符合项目惯例的代码。
+- **判断必须闭环**：claim"还原完成"前必须真实跑过 `dtc verify` 并达标（exit=0）或如实报告未收敛。
+
+## .dtc/ 规格包（只读！除工具外不得手改）
+- `spec.json` — 结构+样式+布局提示。`layout` 字段是设计稿 auto-layout（可信）；`layoutHint.inferred=true` 是几何推断（[AI 推断]，需结合参考图校验，`unknown` 时以截图为准）。
+- `design-ground-truth.json` — 数值锁。所有颜色/字号/圆角/间距的最终依据。
+- `ref/frame.png` — 参考图。结构与视觉分组的判断源。
+- `assets/` — 真实切图（IMAGE fill / VECTOR / 图形类 INSTANCE）。引用这些文件。
+
+## 硬性顺序
+1. `dtc doctor` → 2. `dtc extract` → 3. **结构描述给用户确认（不可跳过）** → 4. 生成代码 → 5. `dtc verify` 循环 → 6. `dtc check` → 7. 交付报告。
+
+## 验证环细节
+- `dtc verify` 退出码：0=收敛；1=还有差距（按 fix-prompt 继续）；2=停滞（停下向用户报告，禁止继续盲改或谎报已修复）。
+- fix-prompt 的每条差异带 nodeId + 期望值（ground-truth）+ 实际值（DOM 探针）；修复时直接对号入座。
+- 文本类细微色差由结构校验（DOM 值比对）抓，不一定出现在像素热区——两边都要看 report。

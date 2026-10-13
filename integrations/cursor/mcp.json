@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "dtc": {
+      "command": "node",
+      "args": ["__DTC_REPO__/packages/mcp/dist/server.js"]
+    }
+  }
+}

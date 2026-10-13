@@ -1,0 +1,32 @@
+{
+  "name": "@dtc/cli",
+  "version": "0.1.0",
+  "description": "dtc 命令行：extract（确定性提取）/ verify（视觉回归闭环）/ check（数值溯源）/ plugin（通道打包）/ doctor",
+  "type": "module",
+  "bin": {
+    "dtc": "./dist/bin.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/bin.ts src/index.ts --format esm --dts --clean --target node20"
+  },
+  "dependencies": {
+    "@dtc/core": "*",
+    "commander": "^12.1.0",
+    "pngjs": "^7.0.0",
+    "pixelmatch": "^5.3.0",
+    "playwright": "^1.47.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/pixelmatch": "^5.2.6",
+    "@types/pngjs": "^6.0.5"
+  }
+}

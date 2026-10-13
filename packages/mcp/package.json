@@ -1,0 +1,20 @@
+{
+  "name": "@dtc/mcp",
+  "version": "0.1.0",
+  "description": "design-to-code MCP server（stdio）：extract / verify / read_report / check / doctor",
+  "type": "module",
+  "bin": {
+    "dtc-mcp": "./dist/server.js"
+  },
+  "main": "./dist/server.js",
+  "types": "./dist/server.d.ts",
+  "scripts": {
+    "build": "tsup src/server.ts --format esm --dts --clean --target node20"
+  },
+  "dependencies": {
+    "@dtc/cli": "*",
+    "@dtc/core": "*",
+    "@modelcontextprotocol/sdk": "^1.0.9",
+    "zod": "^3.23.8"
+  }
+}

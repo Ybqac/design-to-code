@@ -1,0 +1,26 @@
+{
+  "name": "design-to-code",
+  "private": true,
+  "version": "0.2.0",
+  "description": "高保真 Figma→代码闭环工作流：确定性提取 + AI 推断 + 视觉回归（宿主无关，Cursor 优先）",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "tsc --noEmit && npm run build --workspaces",
+    "test": "vitest run",
+    "watch": "vitest",
+    "dtc": "node packages/cli/dist/bin.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/ws": "^8.5.10",
+    "tsup": "^8.2.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

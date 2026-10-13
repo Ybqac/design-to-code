@@ -1,0 +1,18 @@
+---
+description: 设计稿还原时自适应目标项目技术栈与惯例（不预设框架，AI 检测后跟随）。
+globs:
+alwaysApply: false
+---
+
+# 技术栈自适应
+
+生成代码前先检测，生成时跟随：
+
+1. **框架**：package.json dependencies（react/vue2/3/svelte/next/nuxt/小程序…）+ 现有页面/组件写法（`.tsx` 函数组件？`<script setup>`？）。
+2. **样式方案**：跟随项目——Tailwind（看 tailwind.config + 类名风格）、CSS Modules、styled-components、UnoCSS、原生 CSS 变量。不要在 Tailwind 项目里写 styled-components。
+3. **设计 token 接入**：项目已有 theme/token 文件则把 ground-truth 值映射进去（如 tailwind.config 扩展色板），而不是散落硬编码；没有则建议建一份并说明。
+4. **组件惯例**：项目有 design-system/组件库时优先用其组件还原（按 spec 的 role 对号：button→Button、card→Card…）；映射不上的用原生标签。
+5. **路由/目录**：新页面放项目惯用的目录（pages/ 或 app/ 或 src/views），命名跟现有风格。
+6. **单位**：项目用 rem/px/rpx（小程序）就跟随；ground-truth 是 px，rem 按 root font-size 换算并注明。
+
+检测结论先说给用户听一句（"检测到 React 18 + Tailwind，将…"），再动手。

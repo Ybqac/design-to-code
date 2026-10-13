@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { width: 360px; height: 640px; font-family: Inter, "PingFang SC", "Helvetica Neue", sans-serif; background: #FFFFFF; }
+  .card {
+    position: relative; width: 360px; height: 640px;
+    background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.16); overflow: hidden;
+  }
+  .title { position: absolute; left: 24px; top: 24px; width: 312px; color: #111827; font-size: 20px; font-weight: 600; line-height: 28px; }
+  .subtitle { position: absolute; left: 24px; top: 68px; width: 312px; color: #6B7280; font-size: 14px; font-weight: 400; line-height: 20px; }
+  .email { position: absolute; left: 24px; top: 104px; width: 312px; height: 44px; background: #F9FAFB; border: 1px solid #D1D5DB; border-radius: 8px; padding-left: 12px; }
+  .email span { display: block; margin-top: 11px; color: #9CA3AF; font-size: 14px; line-height: 20px; }
+  .btn { position: absolute; left: 24px; top: 164px; width: 312px; height: 44px; background: #3B82F6; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+  .btn span { color: #FFFFFF; font-size: 14px; font-weight: 500; line-height: 20px; }
+  .link { position: absolute; left: 24px; top: 224px; color: #2563EB; font-size: 13px; line-height: 18px; }
+  .close { position: absolute; left: 332px; top: 20px; width: 16px; height: 16px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="title">欢迎回来</div>
+    <div class="subtitle">请登录你的账号</div>
+    <div class="email"><span>you@example.com</span></div>
+    <div class="btn"><span>登录</span></div>
+    <div class="link">忘记密码？</div>
+    <svg class="close" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="#111827" stroke-width="1.5"/></svg>
+  </div>
+</body>
+</html>

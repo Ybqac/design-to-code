@@ -1,0 +1,102 @@
+{
+  "document": {
+    "id": "14669:9900",
+    "name": "Login Card",
+    "type": "FRAME",
+    "absoluteBoundingBox": { "x": 0, "y": 0, "width": 360, "height": 640 },
+    "fills": [{ "type": "SOLID", "color": "#FFFFFF" }],
+    "strokes": [{ "type": "SOLID", "color": "#E5E7EB" }],
+    "strokeWeight": 1,
+    "cornerRadius": 12,
+    "clipsContent": true,
+    "layoutMode": "VERTICAL",
+    "itemSpacing": 16,
+    "paddingTop": 24,
+    "paddingRight": 24,
+    "paddingBottom": 24,
+    "paddingLeft": 24,
+    "effects": [
+      { "type": "DROP_SHADOW", "color": "rgba(0,0,0,0.16)", "offset": { "x": 0, "y": 4 }, "radius": 12, "spread": 0 }
+    ],
+    "children": [
+      {
+        "id": "14669:1001",
+        "name": "Title",
+        "type": "TEXT",
+        "absoluteBoundingBox": { "x": 24, "y": 24, "width": 312, "height": 28 },
+        "fills": [{ "type": "SOLID", "color": "#111827" }],
+        "characters": "欢迎回来",
+        "style": { "fontFamily": "Inter", "fontWeight": 600, "fontSize": 20, "lineHeightPx": 28, "textAlignHorizontal": "LEFT" }
+      },
+      {
+        "id": "14669:1002",
+        "name": "Subtitle",
+        "type": "TEXT",
+        "absoluteBoundingBox": { "x": 24, "y": 68, "width": 312, "height": 20 },
+        "fills": [{ "type": "SOLID", "color": "#6B7280" }],
+        "characters": "请登录你的账号",
+        "style": { "fontFamily": "Inter", "fontWeight": 400, "fontSize": 14, "lineHeightPx": 20, "textAlignHorizontal": "LEFT" }
+      },
+      {
+        "id": "14669:1003",
+        "name": "Email Field",
+        "type": "FRAME",
+        "absoluteBoundingBox": { "x": 24, "y": 104, "width": 312, "height": 44 },
+        "fills": [{ "type": "SOLID", "color": "#F9FAFB" }],
+        "strokes": [{ "type": "SOLID", "color": "#D1D5DB" }],
+        "strokeWeight": 1,
+        "cornerRadius": 8,
+        "layoutMode": "HORIZONTAL",
+        "paddingLeft": 12,
+        "children": [
+          {
+            "id": "14669:1004",
+            "name": "Placeholder",
+            "type": "TEXT",
+            "absoluteBoundingBox": { "x": 36, "y": 116, "width": 160, "height": 20 },
+            "fills": [{ "type": "SOLID", "color": "#9CA3AF" }],
+            "characters": "you@example.com",
+            "style": { "fontFamily": "Inter", "fontWeight": 400, "fontSize": 14, "lineHeightPx": 20, "textAlignHorizontal": "LEFT" }
+          }
+        ]
+      },
+      {
+        "id": "14669:1005",
+        "name": "Submit Button",
+        "type": "FRAME",
+        "absoluteBoundingBox": { "x": 24, "y": 164, "width": 312, "height": 44 },
+        "fills": [{ "type": "SOLID", "color": "#3B82F6" }],
+        "cornerRadius": 8,
+        "layoutMode": "HORIZONTAL",
+        "primaryAxisAlignItems": "CENTER",
+        "counterAxisAlignItems": "CENTER",
+        "children": [
+          {
+            "id": "14669:1006",
+            "name": "Button Label",
+            "type": "TEXT",
+            "absoluteBoundingBox": { "x": 172, "y": 178, "width": 16, "height": 20 },
+            "fills": [{ "type": "SOLID", "color": "#FFFFFF" }],
+            "characters": "登录",
+            "style": { "fontFamily": "Inter", "fontWeight": 500, "fontSize": 14, "lineHeightPx": 20, "textAlignHorizontal": "CENTER" }
+          }
+        ]
+      },
+      {
+        "id": "14669:1007",
+        "name": "Forgot Link",
+        "type": "TEXT",
+        "absoluteBoundingBox": { "x": 24, "y": 224, "width": 80, "height": 18 },
+        "fills": [{ "type": "SOLID", "color": "#2563EB" }],
+        "characters": "忘记密码？",
+        "style": { "fontFamily": "Inter", "fontWeight": 400, "fontSize": 13, "lineHeightPx": 18, "textAlignHorizontal": "LEFT" }
+      },
+      {
+        "id": "14669:1008",
+        "name": "close icon",
+        "type": "VECTOR",
+        "absoluteBoundingBox": { "x": 332, "y": 20, "width": 16, "height": 16 }
+      }
+    ]
+  }
+}

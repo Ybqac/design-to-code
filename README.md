@@ -1,128 +1,104 @@
-# design-to-code
+# design-to-code (dtc)
 
-Antigravity IDE 插件。把 Figma 设计稿还原成前端代码——截图定布局，TalkToFigma 定数值，模型自己生成代码。
+**高保真 Figma → 代码闭环工作流**：确定性提取 + AI 推断 + 视觉回归闭环。宿主无关（Cursor 优先，兼容 ZCode / Claude Code / 任意 agent），全程本地、零外部 LLM 上传。
 
-## 它解决什么
+从 v1 的"提示词/规则包"（实测保真度 70%，复杂布局 40%）升级为**带执行引擎的工具链**：
 
-设计稿转代码时，两条信息源各有硬伤：
+- ground-truth 数值锁由脚本 100% 自动生成（v1 靠模型手整，是最大失真源）
+- 验证环机械化：Playwright 截图 → pixelmatch diff → 热区聚类 → **nodeId 归因**（哪个区域错、对应哪个 Figma 节点、期望值 vs 实际渲染值）→ fix-prompt 驱动修正循环，直到 Fidelity Score 收敛
+- Figma 通道一次安装长期用（桌面 App 插件 / 浏览器用户脚本 / 书签），channel 固定、断线自动重连，告别每次 console 粘贴
 
-- **TalkToFigma 原始节点数据**：颜色/字号/尺寸精确，但布局结构常错乱
-- **截图视觉**：布局结构准，但给不了精确像素
+## 工作流
 
-这个插件把两者融合（fusion）：**截图定结构，TalkToFigma 定数值**，再叠加反捏造护栏和两阶段确认闸口，让模型老老实实按设计稿生成代码。
+```
+dtc doctor ──► dtc extract ──► 【人工闸口】结构确认 ──► 生成代码（AI，跟随项目技术栈）
+                 │                                          │
+                 ▼                                          ▼
+             .dtc/ 规格包 ◄──────────────────── dtc verify 闭环（diff→归因→fix-prompt→修复→重跑）
+   spec / ground-truth / ref图 / assets        exit=0 收敛 │ exit=2 停滞报告
+                                                      │
+                                                      ▼
+                                              dtc check（反捏造：溯源+占位图红线）──► 交付报告
+```
 
-## 安装
-
-### 1. 插件本体（clone 即用）
+## 快速开始
 
 ```bash
-git clone git@github.com:Ybqac/design-to-code.git ~/.gemini/config/plugins/design-to-code
+# 1. 安装与构建（Node ≥ 20）
+cd ~/code/design-to-code-plugin
+npm install && npm run build
+npx playwright install chromium
+alias dtc="node ~/code/design-to-code-plugin/packages/cli/dist/bin.js"
+
+# 2. relay 常驻（复用 grab 的 TalkToFigma relay）
+cd ~/code/cursor-talk-to-figma-mcp && bun socket    # ws://localhost:3055
+
+# 3. Figma 通道（一次安装，长期用）
+dtc plugin install
+#   浏览器首选：把 plugin/build/web/dtc-bridge.user.js 拖入浏览器（Tampermonkey）
+#   最稳兜底：Figma 桌面 App → Plugins → Development → Import from manifest
+#             → 选 plugin/build/desktop/manifest.json
+#   插件里 Connect（channel 默认 dtc）
+
+# 4. 验证环境
+dtc doctor        # relay ✅ + 插件 ✅ + chromium ✅
+
+# 5. 提取 → 还原闭环
+dtc extract --node 14669-9900            # 从 Figma 链接取 nodeId；产物在 .dtc/
+# （AI 按宿主工作流确认结构后生成代码）
+dtc verify --url http://localhost:5173   # 循环直到收敛
+dtc check src/
 ```
 
-重启 Antigravity。插件内的 SKILL.md、hooks.json、rules/ 会被自动加载，无需额外配置。
-
-### 2. TalkToFigma（主数据源）
-
-TalkToFigma 走 WebSocket + Figma 插件，不经 Figma REST API，不受限流。安装三步：
+### Cursor 一键导入
 
 ```bash
-# 装 Bun
-curl -fsSL https://bun.sh/install | bash
-
-# clone + 启动 WebSocket server
-git clone https://github.com/grab/cursor-talk-to-figma-mcp.git ~/code/cursor-talk-to-figma-mcp
-cd ~/code/cursor-talk-to-figma-mcp && bun install && bun socket
+bash integrations/cursor/install.sh <你的项目目录>
+# 生成：.cursor/commands/{design-to-code,dtc-verify}.md + rules/*.mdc + mcp.json(dtc server)
+# 之后在 Cursor 里：/design-to-code <Figma链接>
 ```
 
-在 `~/.gemini/config/mcp_config.json`（或 `~/.gemini/antigravity-ide/mcp_config.json`）加：
-```json
-{
-  "mcpServers": {
-    "TalkToFigma": {
-      "command": "/Users/<你的用户名>/.bun/bin/bun",
-      "args": ["x", "cursor-talk-to-figma-mcp@latest"]
-    }
-  }
-}
-```
+其他宿主：`integrations/claude-code/SKILL.md`（Claude Code skills）、`integrations/generic/AGENTS.md`（任意 agent 指令片段）。
 
-在 Figma 里装插件：Community 链接 https://www.figma.com/community/plugin/1485687494525374295/cursor-talk-to-figma-mcp-plugin ，或桌面端 Plugins → Development → Import plugin from manifest 选 `~/code/cursor-talk-to-figma-mcp/src/cursor_mcp_plugin/manifest.json`。
+## 命令
 
-**Figma Starter 账号无 Development 菜单时**：打开 Figma 文件 → DevTools Console（F12）→ 粘贴仓库根目录 `console-injection.js` 全文 → 回车。插件自动连 `ws://localhost:3055`，功能与正式安装版一致。
+| 命令 | 作用 |
+|---|---|
+| `dtc extract --node <id>` | 确定性提取：节点树（富字段）+ 参考图 + 真实素材 + 自动生成 ground-truth/spec → `.dtc/`。备用 `--from-rest --file-key --pat`；兜底 `--from-snapshot <json>` |
+| `dtc verify --url <url>` | 视觉回归闭环：截图→pixelmatch→热区→nodeId 归因→`report-N.json`+`diff.png`+`fix-prompt.md`。退出码 `0` 收敛 / `1` 继续修复 / `2` 停滞需人工 |
+| `dtc check <dir>` | 反捏造：ground-truth 溯源（每个值须有原始节点树出处）+ 代码硬编码值反查 + 占位图红线 |
+| `dtc plugin build\|install` | 通道打包三形态 + 安装指引 |
+| `dtc doctor` | 环境自检 |
 
-### 3. 备份 MCP（可选）
+MCP server（stdio，6 个 tools）：`packages/mcp/dist/server.js`，配置见 `integrations/cursor/mcp.json`。
 
-Framelink（受 Figma REST 限流，TalkToFigma 不可用时的备份）：
-```json
-"Framelink Figma MCP": {
-  "command": "figma-developer-mcp",
-  "args": ["--figma-api-key=<figd_xxx>", "--image-dir=~/figma-assets", "--stdio"]
-}
-```
+## 为什么保真度能上去（相对 v1 与通用 F2C 方案）
 
-## 使用
+1. **auto-layout 富字段**：上游插件的字段白名单丢掉了 auto-layout/effects/strokeWeight/VECTOR——这是复杂布局 40% 保真度的根因之一。本仓库的 fork 插件（`plugin/src`）补齐了白名单并解除导图 PNG 硬编码（支持 SVG）。
+2. **diff → nodeId 归因**：pixelmatch 只说"哪里不同"；我们把每个热区映射回 Figma 节点，从 ground-truth 取期望值、DOM 探针取实际值，fix-prompt 直接对号入座（开源社区目前没有等价实现）。
+3. **结构 + 像素双通道**：文本类细微差异（字号/颜色）走 DOM 值结构校验，规避字体渲染像素底噪。
+4. **收敛协议**：score ≥ 阈值（默认 95）收敛；连续 3 轮无改进判停滞，如实输出剩余差异，不许模型谎报完成。
+5. **反捏造四红线机械化**：禁占位图 / 禁编文案 / 禁造组件 / 禁凭空数值——红线 1、4 由 `dtc check` 强制，溯源校验防"反向补录"。
 
-### 每次用之前
-
-1. 终端跑 `bun socket`（常驻）
-2. Figma 里打开设计文件
-3. 运行 TalkToFigma 插件，join channel
-
-### 触发
+## 仓库结构
 
 ```
-@design-to-code 还原这个页面到 <target-dir>
-[截图]
+packages/core   纯函数库：normalize（双源归一化）/ ground-truth / spec / layout-infer /
+                diff-cluster / attribute（归因）/ score / fix-prompt —— 单测 20 项
+packages/cli    dtc 命令 + TalkToFigma relay ws 客户端（协议逆向自 socket.ts）
+packages/mcp    stdio MCP server（doctor/extract/verify/read_report/fix_prompt/check）
+plugin/src      增强版 Figma 插件源码（单源）；plugin/build 三形态由 dtc plugin build 产出
+integrations/   cursor / claude-code / generic 宿主物料
+skills/         方法论层（fusion 协议、反捏造、ground-truth 机制、目标栈细则）
+e2e/            合成端到端（extract→缺陷验证→收敛→check 全链路断言）
+docs/           附录（console-injection 应急版）
 ```
 
-取源支持两种方式（任选其一）：
-- **选中 frame**：Figma 里选中目标节点 + 截图 → 模型调 `read_my_design`
-- **传链接**：贴 Figma URL（含 `?node-id=xxx`）+ 截图 → 模型提取 nodeId 调 `get_node_info`，不需选中
+## 隐私
 
-### 7 步流程
+全程本地：节点数据经 localhost WebSocket，diff 与报告在本机生成，不向任何外部服务发送设计数据（上游插件的 GA 统计已在 fork 中移除）。
 
-1. **取源** — TalkToFigma `join_channel` + `read_my_design`（或 `get_node_info`）取原始节点树
-2. **导出 ground truth** — 从节点树直接填 `design-ground-truth.json`（fills/strokes/typography/坐标，逐节点）
-3. **视觉读图** — 只输出结构化布局描述（父子嵌套/对齐/分组，不给像素）
-4. **fusion 融合**（两阶段）— 4a 输出结构描述待用户确认 → 4b 确认后生成代码
-5. **下载真实素材** — `export_node_as_image` 导出图标/图片，不用占位图
-6. **校验护栏** — `verify-ground-truth.js` 扫数值出处 + INTEGRITY_FAIL 防伪造
-7. **回环验证** — headless 渲染 → 与截图 diff → 不一致回到 4a
+## 致谢
 
-### 关键约束
-
-- **反捏造四红线**：禁占位图 URL · 禁凭空文案 · 禁新造 design-system 之外组件 · 禁凭空数值
-- **4a 闸口强制**：模型必须先输出结构描述待你确认，不直接生成代码
-- **f2c 不直接用**：f2c 输出布局常混乱，仅作可选参考
-
-## 验证
-
-```bash
-# 一键自检（13 项：文件完整性 / Node / Antigravity 环境 / MCP / bun / hook / verify）
-node ~/.gemini/config/plugins/design-to-code/scripts/selfcheck.js
-
-# 数值校验 + 防伪造
-node ~/.gemini/config/plugins/design-to-code/skills/design-to-code/scripts/verify-ground-truth.js <code-dir> <ground-truth.json>
-```
-
-## 目录结构
-
-```
-design-to-code/
-├── plugin.json                       manifest
-├── console-injection.js              Figma Console 注入版插件（Starter 账号绕过菜单）
-├── hooks.json                        PreToolUse 自动护栏（拦占位图/lorem）
-├── skills/design-to-code/            skill 本体
-│   ├── SKILL.md                      主入口（7 步流程 + 资源索引）
-│   ├── references/                   7 份细分规则
-│   ├── scripts/verify-ground-truth.js
-│   └── templates/                    Antigravity 专属配置模板
-├── rules/design-to-code.md           workspace rule（设 Always On）
-└── scripts/
-    ├── dtc-hook.js                   护栏脚本
-    └── selfcheck.js                  自检脚本
-```
-
-## License
-
-MIT
+- [grab/cursor-talk-to-figma-mcp](https://github.com/grab/cursor-talk-to-figma-mcp)（MIT）— relay 与插件基础，本仓库的富字段插件是其 fork
+- 思路借鉴（未引入依赖）：uimatch 的 Fidelity Score、figma-pixel-kit 的 fix-prompt、Mimikyu 的文本结构校验、imugi 的收敛协议、plumb-mcp 的双通道提取
