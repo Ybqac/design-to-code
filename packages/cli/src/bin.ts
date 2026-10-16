@@ -10,10 +10,13 @@
  */
 import { Command } from "commander";
 import { runExtract } from "./cmds/extract.js";
+import { runSel } from "./cmds/sel.js";
 import { runVerify } from "./cmds/verify.js";
 import { runCheck } from "./cmds/check.js";
 import { runDoctor } from "./cmds/doctor.js";
 import { runPlugin } from "./cmds/plugin.js";
+import { runRelay } from "./cmds/relay.js";
+import { runSetup } from "./cmds/setup.js";
 
 const program = new Command();
 program.name("dtc").description("design-to-code 高保真 Figma→代码闭环工作流").version("0.1.0");
@@ -21,7 +24,8 @@ program.name("dtc").description("design-to-code 高保真 Figma→代码闭环�
 program
   .command("extract")
   .description("从 Figma 确定性提取规格包（节点树/ground-truth/spec/参考图/素材）→ .dtc/")
-  .requiredOption("--node <id>", "Figma nodeId（14669-9900 或 14669:9900）")
+  .option("--node <id>", "Figma nodeId（14669-9900 或 14669:9900）")
+  .option("--selection", "nodeId 取当前 Figma 选区第一个节点（选中清单见 dtc sel）")
   .option("--channel <name>", "TalkToFigma 插件 channel", "dtc")
   .option("--out <dir>", "输出目录", ".dtc")
   .option("--viewport <wxh>", "视口（默认取节点尺寸）")
@@ -34,6 +38,7 @@ program
   .action(async (opts) => {
     await runExtract({
       node: opts.node,
+      selection: opts.selection,
       channel: opts.channel,
       out: opts.out,
       viewport: opts.viewport,
@@ -44,6 +49,15 @@ program
       fromSnapshot: opts.fromSnapshot,
       maxAssets: Number(opts.maxAssets),
     });
+  });
+
+program
+  .command("sel")
+  .alias("selection")
+  .description("查看当前 Figma 选区（本地直接知道选中了什么，附现成的提取命令）")
+  .option("--channel <name>", "channel", "dtc")
+  .action(async (opts) => {
+    process.exitCode = await runSel({ channel: opts.channel });
   });
 
 program
@@ -99,6 +113,23 @@ program
   .option("--dist <dir>", "产物目录（默认 <repo>/plugin/build）")
   .action(async (action: string, opts) => {
     await runPlugin(action, opts);
+  });
+
+program
+  .command("setup")
+  .description("一条命令完成全部接入：构建 → dtc 全局 → relay 自动拉起 → Cursor 全局（MCP+规则文件）→ Figma 通道引导 → chromium → doctor")
+  .option("--yes", "全自动不等待（CI；非 TTY 自动生效）")
+  .option("--channel <name>", "channel", "dtc")
+  .action(async (opts) => {
+    process.exitCode = await runSetup({ yes: opts.yes, channel: opts.channel });
+  });
+
+program
+  .command("relay")
+  .description("内置 relay 守护进程（ws://localhost:3055，与 grab bun socket 协议兼容、自动复用）")
+  .argument("<action>", "start | stop | status")
+  .action(async (action: string) => {
+    process.exitCode = await runRelay(action);
   });
 
 program

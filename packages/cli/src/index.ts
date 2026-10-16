@@ -1,5 +1,7 @@
 export { runExtract } from "./cmds/extract.js";
 export type { ExtractOptions } from "./cmds/extract.js";
+export { runSel, fetchSelection } from "./cmds/sel.js";
+export type { SelOptions, SelectionNode } from "./cmds/sel.js";
 export { runVerify } from "./cmds/verify.js";
 export type { VerifyOptions } from "./cmds/verify.js";
 export { runCheck, runProvenance, scanCode } from "./cmds/check.js";

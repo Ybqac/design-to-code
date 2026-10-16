@@ -25,7 +25,8 @@ import { dtcPaths } from "../paths.js";
 import { FigmaRelayClient, nodeIdToFileName, normalizeNodeId } from "../ws-client.js";
 
 export interface ExtractOptions {
-  node: string;
+  node?: string;
+  selection?: boolean; // nodeId 取当前 Figma 选区第一个节点
   channel?: string;
   out?: string;
   viewport?: string; // WxH，默认取节点 bbox
@@ -41,7 +42,21 @@ export interface ExtractOptions {
 const TOOL_VERSION = "dtc-cli 0.1.0";
 
 export async function runExtract(opts: ExtractOptions): Promise<void> {
-  const nodeId = normalizeNodeId(opts.node);
+  if (!opts.node && !opts.selection && !opts.fromSnapshot) {
+    throw new Error("需要 --node <14669-9900> 或 --selection（取当前选区）或 --from-snapshot <json>；选中清单可用 dtc sel 查看");
+  }
+  let nodeId = ""; // from-snapshot 时从快照根节点回填
+  if (opts.node) {
+    nodeId = normalizeNodeId(opts.node);
+  } else if (opts.selection) {
+    const { fetchSelection } = await import("./sel.js");
+    const channel = opts.channel ?? "dtc";
+    console.log(`→ 读取当前选区（channel "${channel}"）...`);
+    const sel = await fetchSelection(channel, opts.channelUrl);
+    if (sel.length === 0) throw new Error("Figma 里没有选中节点——点选目标 Frame 后重试，或改用 --node <id>");
+    nodeId = sel[0].id;
+    console.log(`✓ 选中 ${sel.length} 个节点，取第一个: ${sel[0].name} (${nodeId})${sel.length > 1 ? `（其余 ${sel.length - 1} 个见 dtc sel）` : ""}`);
+  }
   const outDir = opts.out ?? ".dtc";
   const p = dtcPaths(outDir);
   fs.mkdirSync(p.refDir, { recursive: true });
@@ -95,6 +110,7 @@ export async function runExtract(opts: ExtractOptions): Promise<void> {
       ? normalizeAuto(rawSnapshot)
       : normalizeTalkToFigma(rawSnapshot);
   const root = normalized.root;
+  if (!nodeId) nodeId = root.id; // --from-snapshot 未指定 --node 时取快照根节点
   capabilities = Array.from(new Set([...capabilities, ...normalized.capabilities]));
 
   if (!root.bbox) throw new Error("根节点缺少 absoluteBoundingBox，无法继续");

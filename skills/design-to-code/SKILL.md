@@ -11,9 +11,9 @@ fusion 双源思想不变：**截图定结构与布局，节点树定数值 grou
 
 | 步骤 | 命令 | 说明 |
 |---|---|---|
-| 1 自检 | `dtc doctor` | relay（bun socket）+ Figma 插件（channel `dtc`）+ chromium |
+| 1 自检 | `dtc doctor` | relay + Figma 插件（channel `dtc`）+ chromium |
 | 2 提取 | `dtc extract --node 14669-9900` | 直连 relay：节点树+参考图+素材 → `.dtc/`，ground-truth 100% 脚本生成 |
-| 3 结构确认 | （人工闸口） | 读 spec.json + 参考图，输出结构描述给用户确认，**确认后才生成**；展示前先过 YAML 溯源机械校验（见下） |
+| 3 结构确认 | （人工闸口） | 完整结构写 `.dtc/structure.yaml` 过溯源校验；**对话只报数量摘要**（见下），确认后才生成 |
 | 4 生成 | （模型） | 跟随目标项目技术栈；数值查 ground-truth；素材用 .dtc/assets |
 | 5 验证环 | `dtc verify --url <实现页>` | 像素diff→热区→nodeId归因→fix-prompt；循环至 exit=0 收敛 / exit=2 停滞 |
 | 6 反捏造 | `dtc check <代码目录>` | 溯源校验 + 硬编码值反查 + 占位图红线 |
@@ -21,15 +21,21 @@ fusion 双源思想不变：**截图定结构与布局，节点树定数值 grou
 
 CLI 入口：`node ~/code/design-to-code-plugin/packages/cli/dist/bin.js <cmd>`（MCP 形态见 `integrations/cursor/mcp.json`）。
 
-## 4a 闸口的双门槛（结构描述的机械校验）
+## 4a 闸口：细节进文件，对话只报数量
 
-结构描述 YAML 必须**内嵌 ground-truth 具体数值**（nodeId + 颜色 + 尺寸 + 圆角 + 字体），禁止笼统标签（`{ type: progress-bar, style: gradient }` 这种模型生成时无从取值的写法）。写完立刻跑：
+结构描述 YAML 必须**内嵌 ground-truth 具体数值**（nodeId + 颜色 + 尺寸 + 圆角 + 字体），禁止笼统标签；完整内容写入 `.dtc/structure.yaml`，然后跑：
 
 ```bash
-node skills/design-to-code/scripts/verify-yaml-provenance.js <fusion-layout-spec.yaml> .dtc/raw-node-snapshot.json
+node skills/design-to-code/scripts/verify-yaml-provenance.js .dtc/structure.yaml .dtc/raw-node-snapshot.json
 ```
 
-脚本逐个核对 YAML 里的 hex 颜色与尺寸是否在原始节点树有出处，编的值 `[FORGED]` 报红退出 1。**通过后才展示给用户确认，才能进生成阶段。** 背景：实测模型在 4a 写的 YAML 里 11 个颜色 10 个是编的——软约束挡不住，这道机械闸口才是硬门槛。
+脚本逐个核对 YAML 里的 hex 颜色与尺寸是否在原始节点树有出处，编的值 `[FORGED]` 报红退出 1（实测模型 11 个颜色能编 10 个——软约束挡不住，机械闸口才是硬门槛）。
+
+**对话里只输出 4 行**（禁止逐项罗列颜色/字号/文案清单，用户自己看 YAML）：
+1. 选中节点名 + nodeId + 尺寸
+2. 一两句话结构概览
+3. `溯源校验：N 个颜色 / M 个尺寸全部通过，0 伪造`（或 `X 个未溯源已标注待核实`）
+4. `完整结构见 .dtc/structure.yaml，确认后生成代码`
 
 ## .dtc/ 规格包（工具产物，禁止手改）
 
@@ -41,7 +47,7 @@ node skills/design-to-code/scripts/verify-yaml-provenance.js <fusion-layout-spec
 
 ## 数据通道
 
-主通道：TalkToFigma relay（ws://localhost:3055，需 `bun socket` + Design-to-Code Bridge 插件连 channel `dtc`）。插件装法见 `dtc plugin install`（桌面 App manifest / 浏览器 .user.js / 书签三形态，装一次长期用）。备份：`dtc extract --from-rest --file-key X --pat <PAT>`（受 Figma 限流）。兜底：`--from-snapshot <json>`。
+主通道：TalkToFigma relay（ws://localhost:3055，内置 `dtc relay start` 或复用已有 bun socket + Design-to-Code Bridge 插件连 channel `dtc`）。插件装法见 `dtc plugin install` / `dtc setup`。备份：`dtc extract --from-rest --file-key X --pat <PAT>`（受 Figma 限流）。兜底：`--from-snapshot <json>`。
 
 ## 反捏造四红线
 

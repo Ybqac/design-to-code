@@ -1,0 +1,25 @@
+---
+description: dtc（design-to-code）工作流。当用户提到 Figma、设计稿、还原页面、生成页面、截图转代码、"选中的节点/当前这个"、dtc 提取时应用。
+globs:
+alwaysApply: false
+---
+
+# dtc 工作流（全局）
+
+## 工具
+
+dtc MCP 提供：dtc_doctor（环境自检）/ dtc_sel（当前 Figma 选区）/ dtc_extract（提取规格包，参数 node 或 selection=true）/ dtc_verify（视觉回归闭环）/ dtc_read_report / dtc_fix_prompt / dtc_check（反捏造校验）。产物在项目 `.dtc/`（spec.json / design-ground-truth.json / ref/frame.png / assets/）。
+
+## 取源
+
+参数给了链接/nodeId 就用它；用户说"选中的/当前这个"或没给参数 → 先 dtc_sel 确认选区再 dtc_extract {selection: true}。
+
+## 流程（严格按序）
+
+1. `dtc_doctor` 自检；relay/插件 ❌ 时提示用户（dtc relay start / Figma 面板已连接）。
+2. `dtc_extract`（node 或 selection）→ `.dtc/` 规格包。
+3. 【人工闸口·不可跳过】读 spec.json + ref/frame.png，完整结构描述（层级+数值绑定）写入 `.dtc/structure.yaml`，跑 verify-yaml-provenance 溯源校验；**对话只报 4 行摘要**——选中节点、一两句结构概览、数量结论（N 个颜色/M 个尺寸通过、0 伪造，或 X 个未溯源已标注）、"完整结构见 .dtc/structure.yaml，确认后生成"。禁止在对话里逐项罗列颜色/字号/文案清单（用户自己看 YAML）。等用户确认再生成代码。
+4. 生成：先检测本项目技术栈并跟随惯例（框架/样式方案/组件库/目录）；数值取 ground-truth 并注释 nodeId；文案逐字 spec.text.content；素材用 .dtc/assets/ 真实切图。
+5. `dtc_verify { url }` 循环：exit=1 → 读 dtc_fix_prompt 按归因（nodeId + 期望值 vs 实际值）修复后重跑；exit=0 收敛；exit=2 停止并如实报告剩余差异，禁止谎报完成。
+6. `dtc_check { code_dir }`：UNMATCHED 项必须处理（换成 ground-truth 值或标"截图估读"）。
+7. 交付报告：文件清单、Fidelity Score 与轮次、check 结果、剩余差异。

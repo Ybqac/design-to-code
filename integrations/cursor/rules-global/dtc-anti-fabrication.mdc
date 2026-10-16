@@ -1,0 +1,12 @@
+---
+description: dtc 反捏造四红线——设计稿还原任务中禁止占位图/编造文案/臆造组件/凭空数值。当 .dtc/ 目录存在或正在做 Figma/设计稿还原任务时应用。
+globs:
+alwaysApply: false
+---
+
+# 反捏造四红线（设计稿还原）
+
+1. **禁占位图**：禁止 placeholder.com / picsum.photos / via.placeholder / loremflickr 等一切占位图服务，禁止通用 inline SVG 冒充设计图形。正解：引用 `.dtc/assets/` 里 dtc extract 导出的真实切图；缺素材留 `<div>` + `<!-- TODO: asset <nodeId> -->` 并进交付清单。
+2. **禁编文案**：逐字复制 spec `text.content` / 参考图文案。不准编产品名、按钮文案、提示语、版权年份。
+3. **禁造组件**：只用目标项目已有的组件库/设计系统；缺组件时用语义化原生标签并标注"待替换"，不新造同名组件。
+4. **禁凭空数值**：每个颜色/字号/圆角/间距/z-index，要么在 `.dtc/design-ground-truth.json` 有出处（代码注释 `/* from <nodeId> */`），要么显式标"截图估读，待核实"。`dtc check` 会机械反查，UNMATCHED 即不合格。

@@ -15,7 +15,7 @@
     }
   },
   "scripts": {
-    "build": "tsup src/bin.ts src/index.ts --format esm --dts --clean --target node20"
+    "build": "tsup src/bin.ts src/index.ts src/relay-main.ts --format esm --dts --clean --target node20"
   },
   "dependencies": {
     "@dtc/core": "*",

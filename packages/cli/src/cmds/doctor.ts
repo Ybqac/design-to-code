@@ -29,11 +29,12 @@ export async function runDoctor(opts: DoctorOptions): Promise<number> {
       console.log(`2. relay(3055) + 插件(channel "${channel}"): ✅`);
     } else if (ping.relay) {
       console.log(`2. relay(3055): ✅，插件: ❌ 未连到 channel "${channel}"`);
-      console.log(`   → 打开 Figma，运行 dtc bridge 插件（或 .user.js 注入），加入 channel "${channel}"`);
+      console.log(`   → 打开 Figma，运行 dtc bridge 插件（或扩展注入），等面板显示"已连接"`);
+      console.log(`   → 注意：Figma 文件首次加载可达 30s，等弹窗面板/角标就绪后再重试 doctor`);
       ok = false;
     } else {
       console.log(`2. relay(3055): ❌ ${ping.detail ?? ""}`);
-      console.log(`   → 在 ~/code/cursor-talk-to-figma-mcp 目录运行: bun socket`);
+      console.log(`   → 自动启动：dtc relay start（或一键接入：dtc setup）`);
       ok = false;
     }
   } finally {
@@ -61,7 +62,7 @@ export async function runDoctor(opts: DoctorOptions): Promise<number> {
     const rich = (manifest.plugin_capabilities ?? []).some((c: string) => c.startsWith("rich-fields"));
     console.log(`4. .dtc 规格包: ✅（node ${manifest.node_id}，via ${manifest.via}${rich ? "，含富字段" : "，⚠️ 无 auto-layout 富字段，建议换增强插件重新 extract"}）`);
   } else {
-    console.log(`4. .dtc 规格包: ⚠️ 缺 ${missing.length} 个文件（还没 extract 过，或换了目录）`);
+    console.log(`4. .dtc/ 规格包: ⏳ 尚未提取（属预期——首次 dtc extract 后自动生成，无需预先准备）`);
   }
 
   console.log(ok ? "\n✅ doctor 通过" : "\n❌ doctor 未通过（按上面提示修复）");

@@ -1,17 +1,65 @@
+<div align="center">
+
 # design-to-code (dtc)
 
-Figma → 前端代码还原工具链，由 CLI、MCP server 与 Figma 插件组成。工作方式：从 Figma 提取设计数据（节点树、设计令牌、参考图、切图素材），配合 AI 生成代码，再用像素 diff 与 DOM 结构校验自动测量还原度并定位差异，循环修正直到收敛。
+**Figma → 高保真前端代码的本地闭环工具链**
 
-## 功能
+确定性提取 · AI 生成 · 像素级验证回归 · 反捏造校验
 
-- **确定性提取**（`dtc extract`）：经本地 WebSocket 通道获取完整节点树（含 auto-layout、阴影、描边、透明度、矢量存根）、去重设计令牌、参考图、IMAGE/VECTOR 素材切图，自动生成 ground-truth 数值锁与 spec。
-- **视觉回归闭环**（`dtc verify`）：Playwright 截图 → pixelmatch 像素对比 → 差异热区聚类 → nodeId 归因（每个热区对应 Figma 节点，附 ground-truth 期望值与 DOM 实际值）→ fix-prompt.md 修正指令；文本类差异走字号/颜色结构校验。
-- **Fidelity Score 与收敛协议**：加权评分（像素 70% + 结构 30%），达到阈值（默认 95）收敛；连续多轮无改进判停滞并输出剩余差异报告。退出码可作 CI 门禁。
-- **反捏造校验**（`dtc check`）：ground-truth 溯源（每个值须有原始节点树出处）+ 生成代码硬编码值反查 + 占位图 URL 检测。
-- **多宿主接入**：Cursor（commands + rules + MCP 一键导入）、Claude Code（skill）、任意 agent（AGENTS.md 片段）。
-- **全程本地**：数据经 localhost WebSocket 传输，diff 与报告在本机生成，无遥测。
+[快速开始](#-快速开始) · [工作流](#-工作流) · [命令](#-命令参考)
 
-## 工作流
+`MIT` `Node ≥ 20` `全程本地 · 无遥测`
+
+</div>
+
+---
+
+## ✨ 特性
+
+- **确定性提取** — 节点树（含 auto-layout、阴影、描边、矢量存根）、设计令牌、参考图、素材切图，ground-truth 数值锁 100% 脚本生成
+- **视觉回归闭环** — Playwright 截图 → pixelmatch → 差异热区 → **nodeId 归因**（每个热区对应 Figma 节点，附期望值 vs 实际渲染值）→ fix-prompt 修正循环直到收敛
+- **Fidelity Score + 收敛协议** — 像素/结构加权评分（默认 ≥95 收敛，连续 3 轮无改进判停滞），退出码可作 CI 门禁
+- **反捏造四红线机械化** — 占位图检测、硬编码数值溯源（每个值须有节点树出处）、4a 结构 YAML 溯源闸口
+- **宿主无关** — Cursor（全局一条命令）/ Claude Code / 任意 agent；MCP server 7 工具 + CLI 双形态
+- **常驻面板** — Figma 页内诊断面板：连接状态、当前选中节点、命令日志流；channel 固定、断线无限重连
+
+## 🚀 快速开始
+
+```bash
+git clone https://github.com/Ybqac/design-to-code.git ~/code/design-to-code-plugin
+cd ~/code/design-to-code-plugin
+npm install && npm run build && dtc setup
+```
+
+`dtc setup` 自动完成：relay 后台拉起 → Cursor 全局接入（MCP + `~/.cursor/rules/` 规则文件）→ Figma 通道引导 → doctor 自检。重启 Cursor 后，在任意项目对话框直接说：
+
+> 把我在 Figma 里选中的节点还原成代码
+
+<details>
+<summary><b>分步安装（等价）</b></summary>
+
+```bash
+npm install && npm run build
+npx playwright install chromium
+cd packages/cli && npm link && cd ../..   # dtc 全局命令
+dtc relay start                            # 内置 relay（3055 已有 bun socket 时自动复用）
+dtc plugin install                         # Figma 通道（三选一，装一次长期用）
+dtc doctor                                 # 全绿即就绪
+```
+
+**Figma 通道三种形态**：
+
+| 形态 | 安装方式 |
+|---|---|
+| Chromium 扩展（推荐） | 解压 `plugin/build/dtc-bridge-chrome-extension.zip` → `chrome://extensions` 开「开发者模式」→ 拖入 `chrome-extension` 文件夹 |
+| Figma 桌面 App 插件 | Plugins → Development → Import plugin from manifest → 选 `plugin/build/desktop/manifest.json` |
+| 书签 | 打开 `plugin/build/web/dtc-bridge.bookmarklet.html`，把按钮拖到书签栏 |
+
+装好后打开 Figma 设计文件，面板右上角显示 `dtc · dtc`（绿色已连接）即成。
+
+</details>
+
+## 🔁 工作流
 
 ```
 dtc doctor ──► dtc extract ──► 【人工闸口】结构确认 ──► 生成代码（AI，跟随项目技术栈）
@@ -24,143 +72,65 @@ dtc doctor ──► dtc extract ──► 【人工闸口】结构确认 ──
                                               dtc check（反捏造校验）──► 交付报告
 ```
 
-## 环境要求
+在 Cursor 里的实际体验：你说一句话 → agent 调 `dtc_sel` 确认选区 → `dtc_extract` 提取 → **对话里只报 4 行摘要**（选中节点 / 结构概览 / `溯源校验：N 色 M 尺寸全过 0 伪造` / 请确认）→ 你确认 → 生成 → verify 循环 → check → 交付报告。
 
-- Node.js ≥ 20
-- Bun（运行 relay）
-- Figma（桌面 App 或浏览器版）
-- 本仓库 `~/code/design-to-code-plugin` 与 relay 仓库 `~/code/cursor-talk-to-figma-mcp`
+## 📖 命令参考
 
-## 安装
+| 命令 | 说明 |
+|---|---|
+| `dtc setup` | 一键接入：构建 → 全局命令 → relay → Cursor 全局 → Figma 通道引导 → chromium → doctor。`--yes` 全自动（CI） |
+| `dtc relay <start\|stop\|status>` | 内置 relay 守护进程（协议兼容 grab bun socket，自动复用；日志 `~/.dtc/relay.log`） |
+| `dtc extract` | 提取规格包 → `.dtc/`。`--node <id>` 或 `--selection`（当前选区）；`--from-rest --file-key --pat`（REST 备用）；`--from-snapshot`（离线）；`--viewport`、`--ref-scale`、`--max-assets` |
+| `dtc sel` | 查看当前 Figma 选区（附现成提取命令） |
+| `dtc verify --url <url>` | 视觉回归闭环。退出码 `0` 收敛 / `1` 继续修复 / `2` 停滞需人工；产物 `report-N.json` + `diff.png` + `fix-prompt.md` |
+| `dtc check <dir>` | 反捏造：ground-truth 溯源 + 硬编码值反查 + 占位图红线 |
+| `dtc plugin <build\|install>` | 通道插件打包/安装指引 |
+| `dtc doctor` | 环境自检 |
 
-### 1. 构建工具链
+MCP server（stdio，7 工具）：`packages/mcp/dist/server.js`。
 
-```bash
-cd ~/code/design-to-code-plugin
-npm install && npm run build
-npx playwright install chromium
+## 🔌 宿主接入
 
-# 全局注册 dtc 命令（注意：npm link 不支持 --workspace 参数，需进入包目录执行）
-cd packages/cli && npm link && cd ../..
-```
-
-> 若后续拉取了新代码：重新 `npm run build` 即可，`dtc` 命令自动指向最新构建，无需重新 link。
-> 解除全局注册：`npm unlink -g @dtc/cli`
-
-### 2. 启动 relay（常驻，保持运行）
-
-```bash
-cd ~/code/cursor-talk-to-figma-mcp && bun socket   # 监听 ws://localhost:3055
-```
-
-### 3. 安装 Figma 通道插件（一次安装，长期使用）
-
-```bash
-dtc plugin install
-```
-
-四种形态任选：
-
-| 形态 | 文件 | 安装方式 |
+| 方式 | 命令 | 得到 |
 |---|---|---|
-| Chromium 扩展 | `plugin/build/dtc-bridge-chrome-extension.zip` | 解压 zip 得到 `chrome-extension` 文件夹 → 打开 `chrome://extensions` → 开启「开发者模式」→ 将文件夹拖入扩展页（或点「加载已解压的扩展程序」选择该文件夹）。无需安装其他扩展管理器，也不需要"打包扩展程序"（.crx 面向商店分发，本地安装会被 Chrome 拦截） |
-| 桌面 App 插件 | `plugin/build/desktop/manifest.json` | Figma 桌面 App → Plugins → Development → Import plugin from manifest |
-| 浏览器用户脚本 | `plugin/build/web/dtc-bridge.user.js` | 安装 Tampermonkey 扩展后，将文件拖入浏览器窗口 |
-| 书签 | `plugin/build/web/dtc-bridge.bookmarklet.html` | 浏览器打开该页，将「▶ dtc bridge」拖到书签栏（每次刷新后需重新点击） |
+| Cursor 全局（推荐） | `dtc setup`（或 `bash integrations/cursor/install.sh --global`） | 所有项目：MCP 工具 + 全局规则文件 `~/.cursor/rules/`，对话直说 |
+| Cursor 项目级 | `bash integrations/cursor/install.sh <项目>` | 斜杠命令 `/design-to-code` + 项目 rules |
+| Claude Code | `integrations/claude-code/SKILL.md` | skill |
+| 任意 agent | `integrations/generic/AGENTS.md` | 指令片段 |
 
-装好后打开 Figma 文件，连接插件（channel 默认 `dtc`，与 CLI 参数一致；用户脚本版右上角角标可切换 channel）。
-
-### 4. 环境自检
-
-```bash
-dtc doctor   # relay、Figma 插件、Playwright chromium、.dtc 规格包逐项检查
-```
-
-## 使用
-
-### 完整流程
-
-1. **提取**：`dtc extract --node 14669-9900`（nodeId 取自 Figma 链接的 `?node-id=` 参数）。产物写入项目下 `.dtc/`。
-2. **结构确认（人工闸口）**：读 `.dtc/spec.json` 与参考图，输出结构描述（层级 + 布局模型 + 关键数值）供确认。展示前可跑 YAML 溯源校验：
-   ```bash
-   node skills/design-to-code/scripts/verify-yaml-provenance.js <fusion-layout-spec.yaml> .dtc/raw-node-snapshot.json
-   ```
-3. **生成代码**：由 AI 按 `.dtc/` 数值与素材生成，跟随目标项目技术栈；颜色/字号/圆角/间距取自 ground-truth 并注释 nodeId，素材引用 `.dtc/assets/`。
-4. **验证环**：
-   ```bash
-   dtc verify --url http://localhost:5173
-   ```
-   按 `.dtc/verify/fix-prompt.md` 修复后重跑，循环直到收敛（exit 0）或停滞（exit 2）。
-5. **反捏造校验**：`dtc check src/`。
-6. **交付报告**：文件清单、Fidelity Score 与轮次、check 结果、剩余差异。
-
-### 命令参考
-
-| 命令 | 说明 | 常用参数 |
-|---|---|---|
-| `dtc extract` | 提取规格包 → `.dtc/` | `--node <id>`（必填）；`--channel`（默认 dtc）；`--out`（默认 .dtc）；`--viewport WxH`；`--ref-scale`（默认 2）；`--from-rest --file-key <k> --pat <token>`（REST 备用通道）；`--from-snapshot <json>`（离线重放）；`--max-assets` |
-| `dtc verify` | 视觉回归闭环 | `--url`（必填，http(s)/file/本地 html 路径）；`--viewport`；`--full-page`；`--round`；`--pixel-threshold`（默认 0.1）；`--score-threshold`（默认 95）；`--max-stalled`（默认 3）；`--max-rounds`（默认 10）；`--wait-ms` |
-| `dtc check` | 反捏造校验 | `<code-dir>`（必填）；`--skip-provenance`；`--skip-scan` |
-| `dtc plugin` | 通道插件打包/安装指引 | `build` / `install`；`--src`；`--dist` |
-| `dtc doctor` | 环境自检 | `--channel`；`--out` |
-
-**`dtc verify` 退出码**：`0` 已收敛；`1` 未达标，按 fix-prompt 修复后重跑；`2` 停滞或达轮次上限，输出剩余差异清单。
-
-**MCP server**：`packages/mcp/dist/server.js`（stdio），tools：`dtc_doctor` / `dtc_extract` / `dtc_verify` / `dtc_read_report` / `dtc_fix_prompt` / `dtc_check`。
-
-## 宿主接入
-
-### Cursor
-
-```bash
-bash integrations/cursor/install.sh <你的项目目录>
-```
-
-生成：`.cursor/commands/design-to-code.md` 与 `dtc-verify.md`（斜杠命令）、`.cursor/rules/*.mdc`（工作流/反捏造/技术栈自适应规则）、`.cursor/mcp.json` 中注册 dtc server。之后在 Cursor 中输入 `/design-to-code <Figma链接>` 执行完整流程，或 `/dtc-verify <URL>` 单跑验证环。
-
-### 其他宿主
-
-- Claude Code：`integrations/claude-code/SKILL.md`
-- 任意 agent：`integrations/generic/AGENTS.md`（指令片段，可贴入 AGENTS.md / 系统提示）
-- ZCode 等支持 skills 的宿主：`skills/design-to-code/`
-
-## .dtc/ 目录
+## 📁 .dtc/ 目录
 
 | 文件 | 内容 |
 |---|---|
-| `manifest.json` | 提取元信息（nodeId、视口、通道能力、素材清单） |
-| `raw-node-snapshot.json` | 原始节点树返回（溯源基准，勿改） |
-| `unified-tree.json` | 归一化节点树（验证环归因用） |
-| `design-ground-truth.json` | 数值锁 v3（生成代码时的数值依据） |
-| `spec.json` | AI 消费用规格（结构 + 样式 + 布局提示） |
-| `ref/frame.png` | 参考图 |
-| `assets/` | 素材切图（PNG/SVG） |
+| `manifest.json` | 提取元信息 |
+| `raw-node-snapshot.json` | 原始节点树（溯源基准，勿改） |
+| `design-ground-truth.json` | 数值锁（生成的数值依据） |
+| `spec.json` / `structure.yaml` | AI 消费规格 / 4a 结构确认文件 |
+| `ref/frame.png` · `assets/` | 参考图 · 素材切图 |
 | `verify/` | report-N.json、diff.png、impl.png、fix-prompt.md |
 
-`.dtc/` 为工具产物，如不想入库可在项目 `.gitignore` 中加一行 `.dtc/`。
+不想入库就在项目 `.gitignore` 加一行 `.dtc/`。
 
-## 仓库结构
+
+## 📦 仓库结构
 
 ```
-packages/core   核心库：节点树归一化 / ground-truth 生成 / spec / 布局推断 /
-                diff 聚类 / nodeId 归因 / 评分与收敛 / fix-prompt
-packages/cli    dtc 命令行（extract/verify/check/plugin/doctor）+ relay WebSocket 客户端
+packages/core   核心库：归一化 / ground-truth / spec / 布局推断 / diff 聚类 / nodeId 归因 / 评分收敛
+packages/cli    CLI（setup/relay/extract/sel/verify/check/plugin/doctor）+ relay + ws 客户端
 packages/mcp    stdio MCP server
-plugin/src      Figma 插件源码（fork of grab/cursor-talk-to-figma-mcp，富字段版）；
-                plugin/build/ 由 dtc plugin build 产出四形态（desktop / chrome 扩展 zip / user.js / 书签）
-integrations/   cursor / claude-code / generic 宿主接入物料
-skills/         方法论：fusion 仲裁规则、反捏造红线、ground-truth 机制、4a YAML 溯源、目标栈细则
+plugin/src      Figma 插件源码（fork of grab/cursor-talk-to-figma-mcp）；build 产四形态
+integrations/   cursor / claude-code / generic 宿主物料
+skills/         方法论：fusion 协议、反捏造、4a YAML 溯源、目标栈细则
 e2e/            端到端测试
-docs/           附录（console-injection 应急版）
 ```
 
-## 开发
+## 🛠️ 开发
 
 ```bash
-npm run build     # 三包构建 + 类型检查
-npm test          # 单元测试 + 端到端测试
+npm run build   # 三包构建 + 类型检查
+npm test        # 单元测试 + 端到端测试（23 项）
 ```
 
-## 许可与致谢
+## 致谢与许可
 
-MIT。Figma 插件基于 [grab/cursor-talk-to-figma-mcp](https://github.com/grab/cursor-talk-to-figma-mcp)（MIT）修改；像素对比使用 [pixelmatch](https://github.com/mapbox/pixelmatch)，渲染截图使用 [Playwright](https://playwright.dev)。
+MIT。Figma 插件基于 [grab/cursor-talk-to-figma-mcp](https://github.com/grab/cursor-talk-to-figma-mcp)（MIT）修改；像素对比 [pixelmatch](https://github.com/mapbox/pixelmatch)；渲染截图 [Playwright](https://playwright.dev)。

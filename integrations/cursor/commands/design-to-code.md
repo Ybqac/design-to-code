@@ -10,14 +10,24 @@
 调用 MCP 工具 `dtc_doctor`。若有 ❌ 按提示修复（通常：relay 没起 → 让用户在 `~/code/cursor-talk-to-figma-mcp` 运行 `bun socket`；插件没连 → 让用户在 Figma 里连接 Design-to-Code Bridge 插件，channel 用 `dtc`）。
 
 ### 2. 确定性提取
-从参数解析 nodeId（`?node-id=14669-9900` → `14669-9900`）。调用 `dtc_extract { node }`。
+从参数解析 nodeId（`?node-id=14669-9900` → `14669-9900`）。三种取源方式：
+- 参数是 Figma 链接或 nodeId → 调用 `dtc_extract { node }`
+- 参数为空，或用户说"选中的/当前这个" → 先调 `dtc_sel` 确认用户在 Figma 里选中的节点（告知用户选中的是什么），再调用 `dtc_extract { selection: true }`
+- 选区为空时，让用户在 Figma 里点选目标 Frame 后重试
+
 产物在 `.dtc/`：`spec.json`（结构+样式+布局提示）、`design-ground-truth.json`（数值锁）、`ref/frame.png`（参考图）、`assets/`（真实切图）。
 若 extract 报"未检测到 auto-layout 字段"，提醒用户换增强插件（`dtc plugin install`）后重新提取，保真度会更高。
 
 ### 3.【人工闸口·不可跳过】结构确认
 - 读 `.dtc/spec.json` + 看参考图 `ref/frame.png`。
-- 输出**结构描述**给用户确认：层级树 + 每个容器的布局模型（优先 spec 里的 `layout`（设计稿 auto-layout，确定性）；其次 `layoutHint`（标了 `[AI 推断]`，需你结合参考图校验）；关键元素内嵌具体数值（颜色/字号/圆角/间距，取自 spec）。
-- 明确问用户："结构确认无误后我再生成代码"。用户确认后才进步骤 4。
+- **完整结构描述写入 `.dtc/structure.yaml`**：层级树 + 布局模型（优先 spec 的 `layout`（设计稿 auto-layout，确定性），其次 `layoutHint`（[AI 推断]，结合参考图校验））+ 每个元素内嵌具体数值——细节放文件里供用户细看。
+- 跑溯源校验：`node <repo>/skills/design-to-code/scripts/verify-yaml-provenance.js .dtc/structure.yaml .dtc/raw-node-snapshot.json`
+- **对话里只输出 4 行摘要**（禁止逐项罗列颜色/字号/文案清单）：
+  1. 选中的节点名 + nodeId + 尺寸
+  2. 一两句话结构概览（页面分几块、层级大意）
+  3. 数量结论：`溯源校验：N 个颜色 / M 个尺寸全部通过，0 伪造`（或 `X 个值未溯源，已在 YAML 标注待核实`）
+  4. `完整结构见 .dtc/structure.yaml，确认后生成代码`
+- 用户确认后才进步骤 4。
 
 ### 4. 生成代码
 - 先检测本项目技术栈（package.json 依赖、现有组件写法、样式方案），沿用项目惯例（组件划分、命名、样式方案、设计 token 接入方式）。

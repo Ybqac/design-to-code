@@ -14,7 +14,7 @@ import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { runDoctor, runExtract, runVerify, runCheck } from "@dtc/cli";
+import { runDoctor, runExtract, runSel, runVerify, runCheck } from "@dtc/cli";
 import { dtcPaths, reportPath } from "@dtc/cli";
 
 function text(t: string) {
@@ -60,16 +60,32 @@ server.tool(
   "dtc_extract",
   "从 Figma 确定性提取规格包 → .dtc/（ground-truth 数值锁 + spec + 参考图 + 真实素材切图）。前置：bun socket + Figma 插件已连 channel",
   {
-    node: z.string().describe("Figma nodeId，如 14669-9900 或 14669:9900"),
+    node: z.string().optional().describe("Figma nodeId，如 14669-9900 或 14669:9900（与 selection 二选一）"),
+    selection: z.boolean().optional().describe("为 true 时取用户当前在 Figma 里选中的第一个节点（用户说'选中的/当前这个'时用）"),
     channel: z.string().default("dtc"),
     out: z.string().default(".dtc"),
     viewport: z.string().optional().describe("WxH，默认取节点尺寸"),
     max_assets: z.number().default(60),
   },
-  async ({ node, channel, out, viewport, max_assets }) => {
+  async ({ node, selection, channel, out, viewport, max_assets }) => {
+    if (!node && !selection) {
+      return text("❌ 需要 node（nodeId）或 selection=true（取当前选区）。可先调 dtc_sel 查看用户当前选中的节点。");
+    }
     const t = await capture(() =>
-      runExtract({ node, channel, out, viewport, maxAssets: max_assets }),
+      runExtract({ node, selection, channel, out, viewport, maxAssets: max_assets }),
     );
+    return text(t);
+  },
+);
+
+server.tool(
+  "dtc_sel",
+  "查看用户当前在 Figma 里选中的节点（id/name/type 清单）——用户提到'选中的/当前这个节点'时先调这个确认",
+  {
+    channel: z.string().default("dtc"),
+  },
+  async ({ channel }) => {
+    const t = await capture(() => runSel({ channel }));
     return text(t);
   },
 );

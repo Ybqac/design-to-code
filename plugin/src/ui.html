@@ -1,909 +1,362 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Cursor MCP Plugin</title>
-    <style>
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          Helvetica, Arial, sans-serif;
-        margin: 0;
-        padding: 20px;
-        color: #e0e0e0;
-        background-color: #1e1e1e;
-      }
-
-      .container {
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-      }
-
-      h1 {
-        font-size: 16px;
-        font-weight: 600;
-        margin-bottom: 10px;
-        color: #ffffff;
-      }
-
-      h2 {
-        font-size: 14px;
-        font-weight: 600;
-        margin-top: 20px;
-        margin-bottom: 8px;
-        color: #ffffff;
-      }
-
-      button {
-        background-color: #18a0fb;
-        border: none;
-        color: white;
-        padding: 8px 12px;
-        border-radius: 6px;
-        margin-top: 8px;
-        margin-bottom: 8px;
-        cursor: pointer;
-        font-size: 14px;
-        transition: background-color 0.2s;
-      }
-
-      button:hover {
-        background-color: #0d8ee0;
-      }
-
-      button.secondary {
-        background-color: #3d3d3d;
-        color: #e0e0e0;
-      }
-
-      button.secondary:hover {
-        background-color: #4d4d4d;
-      }
-
-      button:disabled {
-        background-color: #333333;
-        color: #666666;
-        cursor: not-allowed;
-      }
-
-      input {
-        border: 1px solid #444444;
-        border-radius: 4px;
-        padding: 8px;
-        margin-bottom: 12px;
-        font-size: 14px;
-        width: 100%;
-        box-sizing: border-box;
-        background-color: #2d2d2d;
-        color: #e0e0e0;
-      }
-
-      label {
-        display: block;
-        margin-bottom: 4px;
-        font-size: 12px;
-        font-weight: 500;
-        color: #cccccc;
-      }
-
-      .status {
-        margin-top: 16px;
-        padding: 12px;
-        border-radius: 6px;
-        font-size: 14px;
-      }
-
-      .status.connected {
-        background-color: #1a472a;
-        color: #4ade80;
-      }
-
-      .status.disconnected {
-        background-color: #471a1a;
-        color: #ff9999;
-      }
-
-      .status.info {
-        background-color: #1a3147;
-        color: #66b3ff;
-      }
-
-      .toggle-container {
-        display: flex;
-        align-items: center;
-        margin-bottom: 12px;
-      }
-
-      .toggle-switch {
-        position: relative;
-        display: inline-block;
-        width: 40px;
-        height: 20px;
-        margin-right: 8px;
-      }
-
-      .toggle-switch input {
-        opacity: 0;
-        width: 0;
-        height: 0;
-        margin: 0;
-      }
-
-      .toggle-slider {
-        position: absolute;
-        cursor: pointer;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background-color: #444444;
-        transition: 0.4s;
-        border-radius: 20px;
-      }
-
-      .toggle-slider:before {
-        position: absolute;
-        content: "";
-        height: 16px;
-        width: 16px;
-        left: 2px;
-        bottom: 2px;
-        background-color: white;
-        transition: 0.4s;
-        border-radius: 50%;
-      }
-
-      input:checked + .toggle-slider {
-        background-color: #18a0fb;
-      }
-
-      input:checked + .toggle-slider:before {
-        transform: translateX(20px);
-      }
-
-      .section {
-        margin-bottom: 24px;
-      }
-
-      .hidden {
-        display: none;
-      }
-
-      .logo {
-        width: 50px;
-        height: 50px;
-      }
-
-      .header {
-        display: flex;
-        align-items: center;
-        margin-bottom: 16px;
-      }
-
-      .header-text {
-        margin-left: 12px;
-      }
-
-      .header-text h1 {
-        margin: 0;
-        font-size: 16px;
-      }
-
-      .header-text p {
-        margin: 4px 0 0 0;
-        font-size: 12px;
-        color: #999999;
-      }
-
-      .tabs {
-        display: flex;
-        border-bottom: 1px solid #444444;
-        margin-bottom: 16px;
-      }
-
-      .tab {
-        padding: 8px 16px;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 500;
-        color: #999999;
-      }
-
-      .tab.active {
-        border-bottom: 2px solid #18a0fb;
-        color: #18a0fb;
-      }
-
-      .tab-content {
-        display: none;
-      }
-
-      .tab-content.active {
-        display: block;
-      }
-
-      .link {
-        color: #18a0fb;
-        text-decoration: none;
-        cursor: pointer;
-      }
-
-      .link:hover {
-        text-decoration: underline;
-      }
-
-      .header-logo {
-        padding: 16px;
-        border-radius: 16px;
-        background-color: #333;
-      }
-
-      .header-logo-image {
-        width: 24px;
-        height: 24px;
-        object-fit: contain;
-      }
-      /* Progress styles */
-      .operation-complete {
-        color: #4ade80;
-      }
-      .operation-error {
-        color: #ff9999;
-      }
-    </style>
-  </head>
-
-  <body>
-    <div class="container">
-      <div class="header">
-        <div class="header-text">
-          <h1>Design-to-Code Bridge</h1>
-          <p>Figma ↔ dtc CLI / AI 工具链（fork of Cursor Talk to Figma MCP）</p>
-        </div>
-      </div>
-
-      <div class="tabs">
-        <div id="tab-connection" class="tab active">Connection</div>
-        <div id="tab-about" class="tab">About</div>
-      </div>
-
-      <div id="content-connection" class="tab-content active">
-        <div class="section">
-          <div style="margin-bottom: 16px">
-            <button id="btn-connect" class="primary" style="width: 100%">
-              Connect
-            </button>
-          </div>
-
-          <div id="port-container">
-            <label for="port">WebSocket Server Port</label>
-            <input
-              type="number"
-              id="port"
-              placeholder="3055"
-              value="3055"
-              min="1024"
-              max="65535"
-            />
-          </div>
-
-          <!-- dtc 增强：固定 channel（默认 dtc），CLI 无需每次读随机码 -->
-          <div id="channel-container" style="margin-top: 8px">
-            <label for="channel">Channel（与 dtc extract --channel 一致）</label>
-            <input
-              type="text"
-              id="channel"
-              placeholder="dtc"
-              value="dtc"
-              style="width: 100%; padding: 6px 8px; border: 1px solid #444444; border-radius: 4px; background: #2d2d2d; color: #e0e0e0; box-sizing: border-box"
-            />
-          </div>
-        </div>
-
-        <div id="connection-status" class="status disconnected">
-          Not connected to Cursor MCP server
-        </div>
-
-        <div id="mcp-config" class="section hidden">
-          <h2>MCP Configuration</h2>
-          <p>
-            Copy this configuration to your <code>mcp.json</code> file in
-            Cursor:
-          </p>
-          <textarea
-            id="mcp-json"
-            rows="5"
-            readonly
-            style="
-              width: 100%;
-              background: #2d2d2d;
-              color: #e0e0e0;
-              padding: 12px;
-              border: 1px solid #444444;
-              border-radius: 4px;
-              font-family: monospace;
-              margin-bottom: 8px;
-            "
-          ></textarea>
-          <button id="btn-copy" class="secondary">Copy to Clipboard</button>
-        </div>
-
-        <!-- Add Progress Bar Section -->
-        <div id="progress-container" class="section hidden">
-          <h2>Operation Progress</h2>
-          <div id="progress-message">No operation in progress</div>
-          <div
-            style="
-              width: 100%;
-              background-color: #444;
-              border-radius: 4px;
-              margin-top: 8px;
-            "
-          >
-            <div
-              id="progress-bar"
-              style="
-                width: 0%;
-                height: 8px;
-                background-color: #18a0fb;
-                border-radius: 4px;
-                transition: width 0.3s;
-              "
-            ></div>
-          </div>
-          <div
-            style="
-              display: flex;
-              justify-content: space-between;
-              margin-top: 4px;
-              font-size: 12px;
-            "
-          >
-            <div id="progress-status">Not started</div>
-            <div id="progress-percentage">0%</div>
-          </div>
-        </div>
-      </div>
-
-      <div id="content-about" class="tab-content">
-        <div class="section">
-          <h2>About Talk To Figma Plugin</h2>
-          <p>
-            This plugin allows Cursor AI to communicate with Figma, enabling
-            AI-assisted design operations.
-            <a
-              class="link"
-              onclick="window.open(`https://github.com/grab/cursor-talk-to-figma-mcp`, '_blank')"
-              >Github</a
-            >
-          </p>
-          <p>Version: 1.1.0</p>
-
-          <h2>How to Use</h2>
-          <ol>
-            <li>Make sure the MCP server is running in Cursor</li>
-            <li>Connect to the server using the port number (default: 3055)</li>
-            <li>Once connected, you can interact with Figma through Cursor</li>
-          </ol>
-          <p style="font-size: 11px; color: #888; margin-top: 16px;">
-            Anonymous usage analytics (plugin opens, command names, success/error) are sent to Google Analytics to help improve the plugin. No file content or personal data is collected.
-          </p>
-        </div>
-      </div>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font: 12px/1.5 -apple-system, "PingFang SC", sans-serif;
+    background: #1e1e1e; color: #d4d4d4;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .hdr {
+    padding: 10px 12px 8px; border-bottom: 1px solid #333;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #6b7280; flex: none; }
+  .dot.ok { background: #22c55e; box-shadow: 0 0 6px #22c55e88; }
+  .dot.warn { background: #f59e0b; }
+  .dot.err { background: #ef4444; }
+  #status-text { font-weight: 600; color: #e5e7eb; }
+  .fields { display: flex; gap: 6px; margin-left: auto; }
+  .fields label { display: flex; align-items: center; gap: 4px; color: #9ca3af; }
+  .fields input {
+    width: 52px; background: #2d2d2d; color: #e0e0e0; border: 1px solid #444;
+    border-radius: 4px; padding: 2px 6px; font: 11px ui-monospace, monospace;
+  }
+  .fields input#channel { width: 68px; }
+  .stats {
+    padding: 5px 12px; border-bottom: 1px solid #333; color: #9ca3af;
+    display: flex; gap: 14px; font-size: 11px;
+  }
+  .stats b { color: #d1d5db; font-weight: 600; }
+  .sel-box { border-bottom: 1px solid #333; padding: 6px 12px 8px; }
+  .sel-head {
+    display: flex; align-items: center; gap: 8px; color: #9ca3af; font-size: 11px; margin-bottom: 4px;
+  }
+  .sel-head .n { color: #d1d5db; font-weight: 600; }
+  .sel-head button { margin-left: auto; padding: 2px 8px; font-size: 11px; }
+  #sel-list { display: flex; flex-direction: column; gap: 3px; }
+  .sel-node {
+    display: flex; align-items: center; gap: 6px; padding: 3px 6px;
+    background: #232323; border: 1px solid #333; border-radius: 6px; cursor: pointer;
+  }
+  .sel-node:hover { border-color: #2563eb; }
+  .sel-node .nm { color: #e5e7eb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46%; }
+  .sel-node .ty { color: #6b7280; font-size: 10px; flex: none; }
+  .sel-node .id { color: #60a5fa; font: 10px ui-monospace, monospace; margin-left: auto; flex: none; }
+  .sel-node .sz { color: #6b7280; font-size: 10px; flex: none; }
+  .sel-empty { color: #6b7280; font-size: 11px; padding: 2px 0; }
+  #log {
+    flex: 1; overflow-y: auto; padding: 8px 10px;
+    font: 11px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: #171717;
+  }
+  .ln { white-space: pre-wrap; word-break: break-all; }
+  .ln .t { color: #525252; margin-right: 6px; }
+  .ln.info .m { color: #9ca3af; }
+  .ln.ok .m { color: #4ade80; }
+  .ln.cmd .m { color: #60a5fa; }
+  .ln.res .m { color: #a78bfa; }
+  .ln.err .m { color: #f87171; }
+  .ln.prog .m { color: #d97706; }
+  .foot {
+    padding: 8px 12px; border-top: 1px solid #333;
+    display: flex; gap: 8px;
+  }
+  button {
+    background: #2d2d2d; color: #d4d4d4; border: 1px solid #444; border-radius: 6px;
+    padding: 5px 12px; font: 12px -apple-system, "PingFang SC", sans-serif; cursor: pointer;
+  }
+  button:hover { background: #3a3a3a; }
+  button.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+  button.primary:hover { background: #1d4ed8; }
+</style>
+</head>
+<body>
+  <div class="hdr">
+    <span class="dot" id="dot"></span>
+    <span id="status-text">初始化…</span>
+    <div class="fields">
+      <label>ch <input id="channel" value="dtc" title="channel，与 dtc extract --channel 一致，回车生效"></label>
+      <label>port <input id="port" value="3055" title="relay 端口，回车生效"></label>
     </div>
+  </div>
+  <div class="stats">
+    <span>收 <b id="cnt-in">0</b></span>
+    <span>发 <b id="cnt-out">0</b></span>
+    <span>最近 <b id="last-cmd">-</b></span>
+  </div>
+  <div class="sel-box">
+    <div class="sel-head">
+      <span>当前选中 <span class="n" id="sel-count">0</span> 个</span>
+      <button id="btn-copy-cmd" title="复制 dtc extract --node <第一个选中节点>">复制提取命令</button>
+    </div>
+    <div id="sel-list"><div class="sel-empty">（未选中节点）在 Figma 里点选图层后此处实时更新</div></div>
+  </div>
+  <div id="log"></div>
+  <div class="foot">
+    <button id="btn-toggle" class="primary">重连</button>
+    <button id="btn-copy">复制诊断</button>
+    <button id="btn-clear">清空日志</button>
+  </div>
 
-    <script>
-      // WebSocket connection state
-      const state = {
-        connected: false,
-        socket: null,
-        serverPort: 3055,
-        pendingRequests: new Map(),
-        channel: null,
-        commandTracking: new Map(),
-        manualDisconnect: false,
-        reconnectTimer: null,
-      };
+<script>
+(function () {
+  // ---- 状态 ----
+  var LS = {
+    get: function (k, d) { try { return localStorage.getItem(k) || d; } catch (e) { return d; } },
+    set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  };
+  var channelInput = document.getElementById("channel");
+  var portInput = document.getElementById("port");
+  channelInput.value = LS.get("dtc:channel", "dtc");
+  portInput.value = LS.get("dtc:uiPort", "3055");
 
-      // --- Anonymous analytics (GA4 Measurement Protocol) ---
-      // dtc 增强：移除上游 GA4 匿名统计，工作流全程本地，不外发任何数据
-      const analytics = {
-        track() {},
-        setClientId() {},
-      };
+  var state = {
+    socket: null,
+    connected: false,
+    manualStop: false,
+    retry: 0,
+    retryTimer: null,
+    inCount: 0,
+    outCount: 0,
+    pending: new Map(), // id -> {command}（仅用于日志展示）
+    logs: []
+  };
 
-      // UI Elements
-      const portInput = document.getElementById("port");
-      const connectButton = document.getElementById("btn-connect");
-      const connectionStatus = document.getElementById("connection-status");
+  // ---- 日志 ----
+  var logEl = document.getElementById("log");
+  var LOG_MAX = 200;
+  function log(type, msg) {
+    var time = new Date().toTimeString().slice(0, 8);
+    var line = { t: time, type: type, m: String(msg) };
+    state.logs.push(line);
+    if (state.logs.length > LOG_MAX) state.logs.shift();
+    var div = document.createElement("div");
+    div.className = "ln " + type;
+    div.innerHTML = '<span class="t"></span><span class="m"></span>';
+    div.querySelector(".t").textContent = time;
+    div.querySelector(".m").textContent = msg;
+    logEl.appendChild(div);
+    while (logEl.children.length > LOG_MAX) logEl.removeChild(logEl.firstChild);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function setStatus(cls, text) {
+    document.getElementById("dot").className = "dot " + cls;
+    document.getElementById("status-text").textContent = text;
+  }
+  function bump() {
+    document.getElementById("cnt-in").textContent = state.inCount;
+    document.getElementById("cnt-out").textContent = state.outCount;
+  }
 
-      // Tabs
-      const tabs = document.querySelectorAll(".tab");
-      const tabContents = document.querySelectorAll(".tab-content");
+  // ---- relay 连接 ----
+  function connect() {
+    if (state.socket) return;
+    var port = parseInt(portInput.value, 10) || 3055;
+    var channel = (channelInput.value || "dtc").trim();
+    LS.set("dtc:uiPort", String(port));
+    LS.set("dtc:channel", channel);
+    setStatus("warn", "连接 ws://localhost:" + port + " …");
+    log("info", "连接 ws://localhost:" + port + "（channel " + channel + "）");
+    var ws;
+    try { ws = new WebSocket("ws://localhost:" + port); }
+    catch (e) { log("err", "WebSocket 创建失败: " + e.message); return scheduleReconnect(); }
+    state.socket = ws;
 
-      // Add UI elements for progress tracking
-      const progressContainer = document.getElementById("progress-container");
-      const progressBar = document.getElementById("progress-bar");
-      const progressMessage = document.getElementById("progress-message");
-      const progressStatus = document.getElementById("progress-status");
-      const progressPercentage = document.getElementById("progress-percentage");
-
-      // Initialize UI
-      function updateConnectionStatus(isConnected, message) {
-        state.connected = isConnected;
-
-        let statusMessage =
-          message ||
-          (isConnected
-            ? "Connected to Cursor MCP server"
-            : "Not connected to Cursor MCP server");
-
-        // Add instructions for localhost when disconnected
-        if (!isConnected) {
-          statusMessage += `<br><br>Run this in your terminal, then connect<br><code>bunx cursor-talk-to-figma-socket</code>`;
+    ws.onopen = function () {
+      ws.send(JSON.stringify({ type: "join", channel: channel }));
+    };
+    ws.onmessage = function (ev) {
+      var data;
+      try { data = JSON.parse(ev.data); } catch (e) { return; }
+      var msg = data.message || {};
+      // join 确认（system + result 对象）
+      if (data.type === "system") {
+        if (msg && typeof msg === "object" && msg.result) {
+          state.connected = true; state.retry = 0;
+          setStatus("ok", "已连接 · channel " + channel);
+          log("ok", "已加入 channel " + channel + "（relay 就绪，等 dtc 命令）");
+        } else if (typeof msg === "string") {
+          log("info", "relay: " + msg);
         }
-
-        connectionStatus.innerHTML = statusMessage;
-        connectionStatus.className = `status ${
-          isConnected ? "connected" : "disconnected"
-        }`;
-
-        // Update connect button text and style based on connection state
-        connectButton.textContent = isConnected ? "Disconnect" : "Connect";
-        connectButton.className = isConnected ? "secondary" : "primary";
-        portInput.disabled = isConnected;
-
-        // Show/hide MCP config section
-        const mcpConfig = document.getElementById("mcp-config");
-        mcpConfig.className = `section ${isConnected ? "" : "hidden"}`;
-
-        // Update MCP config text when showing
-        if (isConnected) {
-          updateMcpConfig();
-        }
+        return;
       }
-
-      // Connect to WebSocket server
-      async function connectToServer(port) {
-        try {
-          if (state.connected && state.socket) {
-            updateConnectionStatus(true, "Already connected to server");
-            return;
-          }
-
-          state.serverPort = port;
-          const wsUrl = `ws://localhost:${port}`;
-
-          state.socket = new WebSocket(wsUrl);
-
-          state.socket.onopen = () => {
-            // dtc 增强：channel 取输入框（默认 dtc），不再随机——CLI 侧免读码
-            const channelInput = document.getElementById("channel");
-            const channelName = (
-              (channelInput && channelInput.value) ||
-              "dtc"
-            ).trim();
-            console.log("Joining channel:", channelName);
-            state.channel = channelName;
-
-            // Join the channel using the same format as App.tsx
-            state.socket.send(
-              JSON.stringify({
-                type: "join",
-                channel: channelName,
-              })
-            );
-          };
-
-          state.socket.onmessage = (event) => {
-            try {
-              const data = JSON.parse(event.data);
-              console.log("Received message:", data);
-
-              if (data.type === "system") {
-                // Successfully joined channel
-                if (data.message && data.message.result) {
-                  state.connected = true;
-                  const channelName = data.channel;
-                  updateConnectionStatus(
-                    true,
-                    `Connected to server in channel: <strong>${channelName}</strong>`
-                  );
-                  analytics.track("channel_join", {
-                    port: state.serverPort,
-                    channel: channelName,
-                  });
-
-                  // Notify the plugin code
-                  parent.postMessage(
-                    {
-                      pluginMessage: {
-                        type: "notify",
-                        message: `Connected to Cursor MCP server on port ${port} in channel: ${channelName}`,
-                      },
-                    },
-                    "*"
-                  );
-                }
-              } else if (data.type === "error") {
-                console.error("Error:", data.message);
-                updateConnectionStatus(false, `Error: ${data.message}`);
-                state.socket.close();
-              }
-
-              handleSocketMessage(data);
-            } catch (error) {
-              console.error("Error parsing message:", error);
-            }
-          };
-
-          state.socket.onclose = () => {
-            state.connected = false;
-            state.socket = null;
-            // dtc 增强：断线自动重连（手动 Disconnect 除外），3s 间隔
-            if (!state.manualDisconnect) {
-              updateConnectionStatus(false, "连接断开，3 秒后自动重连...");
-              clearTimeout(state.reconnectTimer);
-              state.reconnectTimer = setTimeout(() => {
-                const port = parseInt(portInput.value, 10) || 3055;
-                connectToServer(port);
-              }, 3000);
-            } else {
-              updateConnectionStatus(false, "Disconnected from server");
-            }
-          };
-
-          state.socket.onerror = (error) => {
-            console.error("WebSocket error:", error);
-            if (!state.connected) {
-              updateConnectionStatus(false, "Connection error");
-              state.socket = null;
-            }
-          };
-        } catch (error) {
-          console.error("Connection error:", error);
-          updateConnectionStatus(
-            false,
-            `Connection error: ${error.message || "Unknown error"}`
-          );
-        }
-      }
-
-      // Disconnect from websocket server
-      function disconnectFromServer() {
-        state.manualDisconnect = true;
-        clearTimeout(state.reconnectTimer);
-        if (state.socket) {
-          state.socket.close();
-          state.socket = null;
-          state.connected = false;
-          updateConnectionStatus(false, "Disconnected from server");
-        }
-      }
-
-      // Handle messages from the WebSocket
-      async function handleSocketMessage(payload) {
-        const data = payload.message;
-        console.log("handleSocketMessage", data);
-
-        // If it's a response to a previous request
-        if (data.id && state.pendingRequests.has(data.id)) {
-          const { resolve, reject } = state.pendingRequests.get(data.id);
-          state.pendingRequests.delete(data.id);
-
-          if (data.error) {
-            reject(new Error(data.error));
-          } else {
-            resolve(data.result);
-          }
-          return;
-        }
-
-        // If it's a new command
-        if (data.command) {
-          try {
-            state.activeRequestId = data.id;
-            state.commandTracking.set(data.id, {
-              command: data.command,
-              startedAt: Date.now(),
-            });
-
-            // Send the command to the plugin code
-            parent.postMessage(
-              {
-                pluginMessage: {
-                  type: "execute-command",
-                  id: data.id,
-                  command: data.command,
-                  params: data.params,
-                },
-              },
-              "*"
-            );
-          } catch (error) {
-            // Send error back to WebSocket
-            sendErrorResponse(
-              data.id,
-              error.message || "Error executing command"
-            );
-          }
-        }
-      }
-
-      function trackCommandResult(id, success, errorMessage) {
-        const meta = state.commandTracking.get(id);
-        if (!meta) return;
-        state.commandTracking.delete(id);
-        const params = {
-          command_name: String(meta.command || "unknown"),
-          success: success ? 1 : 0,
-          duration_ms: Date.now() - meta.startedAt,
-        };
-        if (!success && errorMessage) {
-          params.error_message = String(errorMessage).slice(0, 100);
-        }
-        analytics.track("command_executed", params);
-      }
-
-      // Send a command to the WebSocket server
-      async function sendCommand(command, params) {
-        return new Promise((resolve, reject) => {
-          if (!state.connected || !state.socket) {
-            reject(new Error("Not connected to server"));
-            return;
-          }
-
-          const id = generateId();
-          state.pendingRequests.set(id, { resolve, reject });
-
-          state.socket.send(
-            JSON.stringify({
-              id,
-              type: "message",
-              channel: state.channel,
-              message: {
-                id,
-                command,
-                params,
-              },
-            })
-          );
-
-          // Set timeout to reject the promise after 30 seconds
-          setTimeout(() => {
-            if (state.pendingRequests.has(id)) {
-              state.pendingRequests.delete(id);
-              reject(new Error("Request timed out"));
-            }
-          }, 30000);
-        });
-      }
-
-      // Send success response back to WebSocket
-      function sendSuccessResponse(id, result) {
-        if (!state.connected || !state.socket) {
-          console.error("Cannot send response: socket not connected");
-          return;
-        }
-
-        state.socket.send(
-          JSON.stringify({
-            id,
-            type: "message",
-            channel: state.channel,
-            message: {
-              id,
-              result,
-            },
-          })
+      if (data.type === "error") { log("err", "relay 错误: " + (typeof msg === "string" ? msg : JSON.stringify(msg))); return; }
+      if (data.type === "progress_update") return; // relay 侧进度转发，噪音
+      // 命令（来自 dtc CLI / MCP）
+      if (msg && msg.command) {
+        state.inCount++; bump();
+        state.pending.set(msg.id, msg.command);
+        document.getElementById("last-cmd").textContent = msg.command;
+        log("cmd", "→ " + msg.command + " " + JSON.stringify(msg.params || {}).slice(0, 120));
+        parent.postMessage(
+          { pluginMessage: { type: "execute-command", id: msg.id || data.id, command: msg.command, params: msg.params } },
+          "*"
         );
       }
+    };
+    ws.onclose = function () {
+      state.socket = null;
+      if (state.connected) log("err", "连接断开");
+      state.connected = false;
+      if (!state.manualStop) scheduleReconnect(); else setStatus("err", "已断开（手动）");
+    };
+    ws.onerror = function () { /* onclose 会接手 */ };
+  }
 
-      // Send error response back to WebSocket
-      function sendErrorResponse(id, errorMessage) {
-        if (!state.connected || !state.socket) {
-          console.error("Cannot send error response: socket not connected");
-          return;
-        }
+  function scheduleReconnect() {
+    state.retry += 1;
+    var delay = Math.min(30000, 1000 * Math.pow(1.6, state.retry - 1));
+    setStatus("warn", "重连中 · 第 " + state.retry + " 次（" + Math.round(delay / 1000) + "s 后）");
+    log("info", "重连中 · 第 " + state.retry + " 次（先确认 relay：bun socket）");
+    clearTimeout(state.retryTimer);
+    state.retryTimer = setTimeout(connect, delay);
+  }
 
-        state.socket.send(
-          JSON.stringify({
-            id,
-            type: "message",
-            channel: state.channel,
-            message: {
-              id,
-              error: errorMessage,
-              result: {},
-            },
-          })
-        );
+  function stop() {
+    state.manualStop = true;
+    clearTimeout(state.retryTimer);
+    if (state.socket) state.socket.close();
+    state.socket = null;
+  }
+
+  // ---- 选区显示 ----
+  var selList = document.getElementById("sel-list");
+  var selCount = document.getElementById("sel-count");
+  var lastSelection = [];
+  function idToCmd(id) { return "dtc extract --node " + id.replace(":", "-"); }
+  function copyText(text, okMsg, errObj) {
+    function done(ok) { log(ok ? "ok" : "err", ok ? okMsg : (errObj || "复制失败")); }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, function () { fallback(); });
+    } else { fallback(); }
+    function fallback() {
+      var ta = document.createElement("textarea");
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { done(document.execCommand("copy")); } catch (e) { done(false); }
+      document.body.removeChild(ta);
+    }
+  }
+  function renderSelection(nodes) {
+    lastSelection = nodes || [];
+    selCount.textContent = String(lastSelection.length);
+    selList.innerHTML = "";
+    if (!lastSelection.length) {
+      var emp = document.createElement("div");
+      emp.className = "sel-empty";
+      emp.textContent = "（未选中节点）在 Figma 里点选图层后此处实时更新";
+      selList.appendChild(emp);
+      return;
+    }
+    lastSelection.forEach(function (n) {
+      var row = document.createElement("div");
+      row.className = "sel-node";
+      row.title = "点击复制 nodeId：" + n.id;
+      var nm = document.createElement("span"); nm.className = "nm"; nm.textContent = n.name || "(未命名)";
+      var ty = document.createElement("span"); ty.className = "ty"; ty.textContent = n.type || "";
+      var sz = document.createElement("span"); sz.className = "sz";
+      sz.textContent = n.width ? Math.round(n.width) + "×" + Math.round(n.height) : "";
+      var id = document.createElement("span"); id.className = "id"; id.textContent = n.id;
+      row.appendChild(nm); row.appendChild(ty); row.appendChild(sz); row.appendChild(id);
+      row.onclick = function () { copyText(n.id, "已复制 nodeId " + n.id); };
+      selList.appendChild(row);
+    });
+  }
+  document.getElementById("btn-copy-cmd").onclick = function () {
+    if (!lastSelection.length) { log("err", "没有选中节点，先在 Figma 里选一个"); return; }
+    copyText(idToCmd(lastSelection[0].id), "已复制: " + idToCmd(lastSelection[0].id));
+  };
+
+  // ---- sandbox（插件代码）↔ 面板 ----
+  window.addEventListener("message", function (e) {
+    var pm = e.data && e.data.pluginMessage;
+    if (!pm) return;
+    if (pm.type === "command-result") {
+      state.outCount++; bump();
+      var cmd = state.pending.get(pm.id) || "?";
+      state.pending.delete(pm.id);
+      var brief = JSON.stringify(pm.result ?? {}).slice(0, 100);
+      log("res", "← " + cmd + " OK " + brief);
+      if (state.socket && state.socket.readyState === 1) {
+        state.socket.send(JSON.stringify({ id: pm.id, type: "message", channel: (channelInput.value || "dtc").trim(), message: { id: pm.id, result: pm.result || {} } }));
       }
-
-      // Helper to generate unique IDs
-      function generateId() {
-        return (
-          Date.now().toString(36) + Math.random().toString(36).substr(2, 5)
-        );
+    } else if (pm.type === "command-error") {
+      state.outCount++; bump();
+      var cmd2 = state.pending.get(pm.id) || "?";
+      state.pending.delete(pm.id);
+      log("err", "← " + cmd2 + " 失败: " + pm.error);
+      if (state.socket && state.socket.readyState === 1) {
+        state.socket.send(JSON.stringify({ id: pm.id, type: "message", channel: (channelInput.value || "dtc").trim(), message: { id: pm.id, result: {}, error: pm.error } }));
       }
-
-      // Add this function after the generateId() function
-      function generateChannelName() {
-        const characters = "abcdefghijklmnopqrstuvwxyz0123456789";
-        let result = "";
-        for (let i = 0; i < 8; i++) {
-          result += characters.charAt(
-            Math.floor(Math.random() * characters.length)
-          );
-        }
-        return result;
+    } else if (pm.type === "command_progress") {
+      var st = pm.status || "";
+      if (st === "started" || st === "completed" || st === "error") {
+        log("prog", "⏳ " + (pm.commandType || "") + " " + st + (pm.message ? " — " + pm.message : ""));
       }
-
-      // Tab switching
-      tabs.forEach((tab) => {
-        tab.addEventListener("click", () => {
-          tabs.forEach((t) => t.classList.remove("active"));
-          tabContents.forEach((c) => c.classList.remove("active"));
-
-          tab.classList.add("active");
-          const contentId = "content-" + tab.id.split("-")[1];
-          document.getElementById(contentId).classList.add("active");
-        });
-      });
-
-      // Replace the separate connect/disconnect button listeners with a single toggle
-      connectButton.addEventListener("click", () => {
-        if (state.connected) {
-          updateConnectionStatus(false, "Disconnecting...");
-          connectionStatus.className = "status info";
-          disconnectFromServer();
-        } else {
-          const port = parseInt(portInput.value, 10) || 3055;
-          state.manualDisconnect = false;
-          clearTimeout(state.reconnectTimer);
-          updateConnectionStatus(false, "Connecting...");
-          connectionStatus.className = "status info";
-          connectToServer(port);
-        }
-      });
-
-      // Function to update progress UI
-      function updateProgressUI(progressData) {
-        // Show progress container if hidden
-        progressContainer.classList.remove("hidden");
-
-        // Update progress bar
-        const progress = progressData.progress || 0;
-        progressBar.style.width = `${progress}%`;
-        progressPercentage.textContent = `${progress}%`;
-
-        // Update message
-        progressMessage.textContent =
-          progressData.message || "Operation in progress";
-
-        // Update status text based on operation state
-        if (progressData.status === "started") {
-          progressStatus.textContent = "Started";
-          progressStatus.className = "";
-        } else if (progressData.status === "in_progress") {
-          progressStatus.textContent = "In Progress";
-          progressStatus.className = "";
-        } else if (progressData.status === "completed") {
-          progressStatus.textContent = "Completed";
-          progressStatus.className = "operation-complete";
-
-          // Hide progress container after 5 seconds
-          setTimeout(() => {
-            progressContainer.classList.add("hidden");
-          }, 5000);
-        } else if (progressData.status === "error") {
-          progressStatus.textContent = "Error";
-          progressStatus.className = "operation-error";
-        }
+    } else if (pm.type === "selection") {
+      renderSelection(pm.nodes || []);
+      if ((pm.nodes || []).length) {
+        log("info", "选中 " + pm.nodes.length + " 个: " + pm.nodes.slice(0, 3).map(function (n) { return n.name + "(" + n.id + ")"; }).join(", ") + (pm.nodes.length > 3 ? " …" : ""));
       }
+    } else if (pm.type === "notify") {
+      log("info", "插件: " + (pm.message || ""));
+    } else if (pm.type === "resize") {
+      /* 忽略 */
+    } else {
+      log("info", "sandbox: " + JSON.stringify(pm).slice(0, 100));
+    }
+  });
 
-      // Send operation progress update to server
-      function sendProgressUpdateToServer(progressData) {
-        if (!state.connected || !state.socket) {
-          console.error("Cannot send progress update: socket not connected");
-          return;
-        }
-
-        console.log("Sending progress update to server:", progressData);
-
-        const requestId = state.activeRequestId || progressData.commandId;
-        state.socket.send(
-          JSON.stringify({
-            id: requestId,
-            type: "progress_update",
-            channel: state.channel,
-            message: {
-              id: requestId,
-              type: "progress_update",
-              data: progressData,
-            },
-          })
-        );
+  // ---- 按钮 ----
+  var btnToggle = document.getElementById("btn-toggle");
+  function refreshToggle() {
+    btnToggle.textContent = state.connected ? "断开" : "重连";
+  }
+  btnToggle.onclick = function () {
+    if (state.connected) { stop(); refreshToggle(); }
+    else { state.manualStop = false; state.retry = 0; clearTimeout(state.retryTimer); connect(); refreshToggle(); }
+  };
+  var t = setInterval(refreshToggle, 1000); void t;
+  document.getElementById("btn-clear").onclick = function () {
+    state.logs = [];
+    logEl.innerHTML = "";
+  };
+  document.getElementById("btn-copy").onclick = function () {
+    var text = [
+      "# dtc-bridge 诊断",
+      "# url: " + location.href,
+      "# ua: " + navigator.userAgent,
+      "# 状态: connected=" + state.connected + " retry=" + state.retry + " channel=" + channelInput.value + " port=" + portInput.value,
+      "# 收=" + state.inCount + " 发=" + state.outCount,
+      "--- 日志 ---"
+    ].concat(state.logs.map(function (l) { return l.t + " [" + l.type + "] " + l.m; })).join("\n");
+    function done(ok) { log(ok ? "ok" : "err", ok ? "诊断已复制到剪贴板" : "复制失败，请手动选择日志"); }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, function () { fallback(); });
+    } else { fallback(); }
+    function fallback() {
+      var ta = document.createElement("textarea");
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { done(document.execCommand("copy")); } catch (e) { done(false); }
+      document.body.removeChild(ta);
+    }
+  };
+  [channelInput, portInput].forEach(function (inp) {
+    inp.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") {
+        log("info", "参数变更 → 重连（channel " + channelInput.value.trim() + ", port " + portInput.value + "）");
+        stop(); state.manualStop = false; state.retry = 0; connect();
       }
+    });
+  });
 
-      // Reset progress UI
-      function resetProgressUI() {
-        progressContainer.classList.add("hidden");
-        progressBar.style.width = "0%";
-        progressMessage.textContent = "No operation in progress";
-        progressStatus.textContent = "Not started";
-        progressStatus.className = "";
-        progressPercentage.textContent = "0%";
-      }
-
-      // Listen for messages from the plugin code
-      window.onmessage = (event) => {
-        const message = event.data.pluginMessage;
-        if (!message) return;
-
-        console.log("Received message from plugin:", message);
-
-        switch (message.type) {
-          case "connection-status":
-            updateConnectionStatus(message.connected, message.message);
-            break;
-          case "auto-connect":
-            connectButton.click();
-            break;
-          case "auto-disconnect":
-            connectButton.click();
-            break;
-          case "command-result":
-            // Forward the result from plugin code back to WebSocket
-            sendSuccessResponse(message.id, message.result);
-            trackCommandResult(message.id, true);
-            break;
-          case "command-error":
-            // Forward the error from plugin code back to WebSocket
-            sendErrorResponse(message.id, message.error);
-            trackCommandResult(message.id, false, message.error);
-            break;
-          case "command_progress":
-            // Update UI with progress information
-            updateProgressUI(message);
-            // Forward progress update to server
-            sendProgressUpdateToServer(message);
-            break;
-          case "analytics-client-id":
-            analytics.setClientId(message.clientId);
-            break;
-        }
-      };
-
-      // Add this to the script section, after all the other event listeners
-      document.getElementById("btn-copy").addEventListener("click", () => {
-        const textarea = document.getElementById("mcp-json");
-        textarea.select();
-        document.execCommand("copy");
-        const button = document.getElementById("btn-copy");
-        button.textContent = "Copied!";
-        setTimeout(() => {
-          button.textContent = "Copy to Clipboard";
-        }, 2000);
-      });
-
-      // Add this function to the script section
-      function updateMcpConfig() {
-        const mcpConfig = {
-          mcpServers: {
-            TalkToFigma: {
-              command: "bunx",
-              args: ["cursor-talk-to-figma-mcp@latest"],
-            },
-          },
-        };
-
-        document.getElementById("mcp-json").value = JSON.stringify(
-          mcpConfig,
-          null,
-          2
-        );
-      }
-    </script>
-  </body>
+  // ---- 启动：自动连接 ----
+  log("info", "dtc-bridge 面板就绪（协议：ws relay + pluginMessage）");
+  connect();
+})();
+</script>
+</body>
 </html>

@@ -21,49 +21,7 @@ export interface PluginOptions {
 
 const VERSION = "0.1.0";
 
-/** 自动重连版桥接 UI（console-injection shim 的升级：固定 channel + 指数退避重连） */
-function bridgeUiHtml(): string {
-  return `<!DOCTYPE html><html><body><script>
-(function () {
-  var CHANNEL = "dtc";
-  try { CHANNEL = localStorage.getItem("dtc:channel") || CHANNEL; } catch (e) {}
-  var socket = null, retry = 0;
-  function connect() {
-    try { socket = new WebSocket("ws://localhost:3055"); } catch (e) { return schedule(); }
-    socket.onopen = function () {
-      retry = 0;
-      socket.send(JSON.stringify({ type: "join", channel: CHANNEL }));
-    };
-    socket.onmessage = function (e) {
-      try {
-        var data = JSON.parse(e.data);
-        var msg = data.message || data;
-        if (msg && msg.command) {
-          parent.postMessage({ pluginMessage: { type: "execute-command", id: msg.id || data.id, command: msg.command, params: msg.params } }, "*");
-        }
-      } catch (err) {}
-    };
-    socket.onclose = function () { schedule(); };
-    socket.onerror = function () {};
-  }
-  function schedule() {
-    var delay = Math.min(30000, 2000 * Math.pow(1.5, retry++));
-    setTimeout(connect, delay);
-  }
-  window.onmessage = function (e) {
-    if (e.data && e.data.pluginMessage) {
-      var m = e.data.pluginMessage;
-      if (m.type === "command-result" || m.type === "command-error") {
-        if (socket && socket.readyState === 1) {
-          socket.send(JSON.stringify({ id: m.id, type: "message", channel: CHANNEL, message: { id: m.id, result: m.result || {}, error: m.error } }));
-        }
-      }
-    }
-  };
-  connect();
-})();
-</script></body></html>`;
-}
+/** 诊断面板（自动重连、channel 固定、日志流）——与桌面插件共用同一份 ui.html */
 
 function userscriptHeader(): string {
   return `// ==UserScript==
@@ -98,64 +56,19 @@ export async function runPlugin(action: string, opts: PluginOptions): Promise<vo
     fs.copyFileSync(path.join(srcDir, "ui.html"), path.join(desktopDir, "ui.html"));
     fs.copyFileSync(path.join(srcDir, "manifest.json"), path.join(desktopDir, "manifest.json"));
 
-    // 2. 桥接注入体（.user.js 与 chrome 扩展共用）
-    const payload = `var __html__ = ${JSON.stringify(bridgeUiHtml())};\n${codeJs}`;
-    const body = `(function () {
-  "use strict";
-  if (window.__dtcBridgeLoaded) return;
-  window.__dtcBridgeLoaded = true;
-
-  var badge = document.createElement("div");
-  badge.style.cssText = "position:fixed;top:12px;right:12px;z-index:2147483647;padding:6px 10px;border-radius:8px;font:12px/1.4 -apple-system,sans-serif;color:#fff;background:#6b7280;box-shadow:0 2px 8px rgba(0,0,0,.3);cursor:pointer;";
-  badge.title = "点击切换 channel（当前 localStorage dtc:channel）";
-  badge.onclick = function () {
-    var next = prompt("dtc bridge channel：", localStorage.getItem("dtc:channel") || "dtc");
-    if (next) { localStorage.setItem("dtc:channel", next.trim()); location.reload(); }
-  };
-  function setBadge(text, color) { badge.textContent = text; badge.style.background = color; }
-  (document.body || document.documentElement).appendChild(badge);
-  setBadge("dtc: 等待编辑器加载…", "#6b7280");
-
-  // Figma 文件加载可达 30s+，window.figma 在编辑器就绪后才出现——轮询等待而非一次性判定
-  var WAIT_MAX = 120;
-  var waited = 0;
-  var timer = setInterval(function () {
-    waited += 1;
-    if (typeof figma !== "undefined" && figma) {
-      clearInterval(timer);
-      if (typeof figma.showUI === "function") {
-        tryInject();
-      } else {
-        setBadge("dtc: ⚠️ figma 在但无 showUI", "#f59e0b");
-        console.warn("[dtc-bridge] window.figma 已出现但缺少 showUI 方法。实际可用键:", Object.keys(figma).slice(0, 40).join(", "));
-        console.warn("[dtc-bridge] 把上面这行键名列表反馈到 dtc 仓库issue，便于适配该 Figma 版本。");
-      }
-      return;
-    }
-    if (waited >= WAIT_MAX) {
-      clearInterval(timer);
-      setBadge("dtc: ❌ " + WAIT_MAX + "s 未等到 figma", "#ef4444");
-      console.error("[dtc-bridge] " + WAIT_MAX + " 秒内 window.figma 未出现。当前 URL:", location.href);
-      return;
-    }
-    if (waited % 5 === 0) setBadge("dtc: 等待编辑器加载 " + waited + "s…", "#6b7280");
-  }, 1000);
-
-  function tryInject() {
-    try {
-${payload
+    // 2. 桥接注入体（f2c 式常驻 overlay：面板 + 无限等待注入 + 无限退避重连）
+    //    payload 由 overlay 在 window.figma 就绪时调用（不再一次性注入、无超时上限）
+    const overlayJs = fs.readFileSync(path.join(srcDir, "overlay.js"), "utf8");
+    const payloadRunner = `window.__dtcRunPayload = function () {
+  window.__dtcOverlay = true;
+  var __html__ = "";
+${codeJs
   .split("\n")
-  .map((l) => "      " + l)
+  .map((l) => "  " + l)
   .join("\n")}
-      setBadge("dtc: ✅ channel " + ((localStorage.getItem("dtc:channel") || "dtc")) + " 已就绪", "#22c55e");
-      console.log("[dtc-bridge] 注入完成：channel=" + (localStorage.getItem("dtc:channel") || "dtc") + "，relay=ws://localhost:3055（先 bun socket）");
-    } catch (e) {
-      setBadge("dtc: ❌ 注入失败 " + (e && e.message), "#ef4444");
-      console.error("[dtc-bridge] 注入失败:", e);
-    }
-  }
-})();
-`;
+};`
+    const body = payloadRunner + "\n" + overlayJs;
+
     const webDir = path.join(distDir, "web");
     fs.mkdirSync(webDir, { recursive: true });
 
@@ -206,7 +119,7 @@ ${body}`;
     }
 
     // 3. bookmarklet 页面（payload 打进 javascript: URL，拖到书签栏即用）
-    const bookmarklet = `javascript:${encodeURIComponent(`(function(){if(window.__dtcBridgeLoaded)return;window.__dtcBridgeLoaded=true;${payload.replace(/\/\/[^\n]*/g, "")}})();`)}void 0;`;
+    const bookmarklet = `javascript:${encodeURIComponent(`(function(){${body.replace(/\/\/[^\n]*/g, "")}})();`)}void 0;`;
     const bmPage = `<!DOCTYPE html>
 <html lang="zh">
 <head><meta charset="utf-8"><title>dtc bridge 书签安装</title>
