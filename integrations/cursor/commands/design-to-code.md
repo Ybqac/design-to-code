@@ -7,7 +7,7 @@
 ## 流程（严格按序执行）
 
 ### 1. 环境自检
-调用 MCP 工具 `dtc_doctor`。若有 ❌ 按提示修复（通常：relay 没起 → 让用户在 `~/code/cursor-talk-to-figma-mcp` 运行 `bun socket`；插件没连 → 让用户在 Figma 里连接 Design-to-Code Bridge 插件，channel 用 `dtc`）。
+调用 MCP 工具 `dtc_doctor`。若有 ❌ 按提示修复（通常：relay 没起 → `dtc relay start`，3055 已占用则复用；插件没连 → `dtc plugin install`，主推 Figma 桌面 App → Plugins → Development → Import plugin from manifest，channel 用 `dtc`）。
 
 ### 2. 确定性提取
 从参数解析 nodeId（`?node-id=14669-9900` → `14669-9900`）。三种取源方式：
@@ -30,7 +30,7 @@
 - 用户确认后才进步骤 4。
 
 ### 4. 生成代码
-- 先检测本项目技术栈（package.json 依赖、现有组件写法、样式方案），沿用项目惯例（组件划分、命名、样式方案、设计 token 接入方式）。
+- 先检测本项目技术栈并跟随全局规则的 6 条：框架、样式方案、设计 token 接入、组件惯例、路由/目录、单位。检测结论先说一句再动手。
 - 布局：按 spec 的 layout/layoutHint 写 flex/grid，不要照抄绝对定位（除非 hint 是 absolute）。
 - 数值：颜色/字号/圆角/间距一律从 spec/ground-truth 取，注释 `/* from nodeId */`；不在数据里的标注 `截图估读`。
 - 文案：逐字用 spec 的 `text.content`，禁止编造。

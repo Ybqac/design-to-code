@@ -1,7 +1,7 @@
 /**
  * dtc relay —— 内置 relay 守护进程管理（start / stop / status）。
  *
- * 端口 3055 已有监听（bun socket 或自身已起）→ 视为就绪复用，不重复启动。
+ * 端口 3055 已有监听则复用，不重复启动。
  */
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -50,7 +50,7 @@ export async function runRelay(action: string): Promise<number> {
   if (action === "status") {
     const up = await relayUp();
     const pid = readPid();
-    console.log(`relay(3055): ${up ? "✅ 运行中" : "❌ 未启动"}${pid && pidAlive(pid) ? `（dtc pid ${pid}）` : up ? "（非 dtc 拉起，如 bun socket）" : ""}`);
+    console.log(`relay(3055): ${up ? "✅ 运行中" : "❌ 未启动"}${pid && pidAlive(pid) ? `（dtc pid ${pid}）` : up ? "（非 dtc 拉起，已复用现有监听）" : ""}`);
     if (up) console.log(`日志: ${LOG_FILE}`);
     else console.log(`启动: dtc relay start`);
     return up ? 0 : 1;
@@ -97,7 +97,7 @@ export async function runRelay(action: string): Promise<number> {
     }
     fs.rmSync(PID_FILE, { force: true });
     if (await relayUp()) {
-      console.log(`⚠️ 3055 仍有监听但不是 dtc 拉起的（可能是 bun socket），请手动停止`);
+      console.log(`⚠️ 3055 仍有监听但不是 dtc 拉起的，请手动停止该进程`);
       return 1;
     }
     console.log(`relay 未在运行`);

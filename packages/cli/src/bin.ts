@@ -107,7 +107,7 @@ program
 
 program
   .command("plugin")
-  .description("通道打包：build 三形态（desktop/.user.js/bookmarklet）、install 安装指引")
+  .description("通道打包：build 四形态（desktop/扩展/user.js/bookmarklet）、install 安装指引")
   .argument("<action>", "build | install")
   .option("--src <dir>", "插件源码目录（默认 <repo>/plugin/src）")
   .option("--dist <dir>", "产物目录（默认 <repo>/plugin/build）")
@@ -117,16 +117,17 @@ program
 
 program
   .command("setup")
-  .description("一条命令完成全部接入：构建 → dtc 全局 → relay 自动拉起 → Cursor 全局（MCP+规则文件）→ Figma 通道引导 → chromium → doctor")
+  .description("全局安装：构建自检 → npm link → relay → Cursor MCP/规则/skill → Figma 通道 → chromium → doctor。--project 只额外拷斜杠命令")
   .option("--yes", "全自动不等待（CI；非 TTY 自动生效）")
   .option("--channel <name>", "channel", "dtc")
+  .option("--project <dir>", "可选：把斜杠命令拷到 <dir>/.cursor/commands/，不写项目级 rules 与 mcp")
   .action(async (opts) => {
-    process.exitCode = await runSetup({ yes: opts.yes, channel: opts.channel });
+    process.exitCode = await runSetup({ yes: opts.yes, channel: opts.channel, project: opts.project });
   });
 
 program
   .command("relay")
-  .description("内置 relay 守护进程（ws://localhost:3055，与 grab bun socket 协议兼容、自动复用）")
+  .description("内置 relay 守护进程（ws://localhost:3055；端口已占用则复用，日志 ~/.dtc/relay.log）")
   .argument("<action>", "start | stop | status")
   .action(async (action: string) => {
     process.exitCode = await runRelay(action);
@@ -134,7 +135,7 @@ program
 
 program
   .command("doctor")
-  .description("环境自检（relay/插件/Playwright/.dtc）")
+  .description("环境自检（MCP 与规则 / relay / 插件 / Playwright / .dtc）")
   .option("--channel <name>", "channel", "dtc")
   .option("--out <dir>", ".dtc 目录", ".dtc")
   .action(async (opts) => {

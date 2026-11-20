@@ -205,7 +205,7 @@
     state.retry += 1;
     var delay = Math.min(30000, 1000 * Math.pow(1.6, state.retry - 1));
     setStatus("warn", "重连中 · 第 " + state.retry + " 次（" + Math.round(delay / 1000) + "s 后）");
-    log("info", "重连中 · 第 " + state.retry + " 次（relay 未启动？bun socket）");
+    log("info", "重连中 · 第 " + state.retry + " 次（relay 未启动？运行 dtc relay start）");
     clearTimeout(state.retryTimer);
     state.retryTimer = setTimeout(connect, delay);
   }

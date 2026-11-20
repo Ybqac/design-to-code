@@ -6,6 +6,8 @@ alwaysApply: false
 
 # F2C 闭环工作流（dtc 工具链）
 
+安装器不再拷贝本文件。权威流程是 `integrations/cursor/rules-global/dtc-workflow.mdc`。
+
 ## 分工原则
 - **确定性的事交给工具**：节点树/数值/素材/参考图由 `dtc extract` 落盘，不要手工调 Figma MCP 重抄。
 - **AI 只做工具做不了的**：布局语义选择、组件划分、交互状态、把 spec 翻译成符合项目惯例的代码。

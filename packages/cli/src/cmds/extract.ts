@@ -2,7 +2,7 @@
  * dtc extract —— 确定性提取：一条命令产出 .dtc/ 规格包。
  *
  * 数据通道：
- *  1. 默认：TalkToFigma 插件 ws 通道（需 bun socket relay + Figma 插件连到 --channel）
+ *  1. 默认：TalkToFigma 插件 ws 通道（dtc relay start；3055 已有监听则复用。插件连到 --channel）
  *  2. --from-rest：Figma REST API（需 PAT，受限流，CI/无桌面端备用）
  *  3. --from-snapshot：直接读之前落盘的原始 JSON（离线重放/调试）
  *

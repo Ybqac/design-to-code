@@ -6,20 +6,26 @@ alwaysApply: false
 
 # dtc 工作流（全局）
 
+权威流程就这一份。技术栈 6 条在下面第 4 步。反捏造见 `dtc-anti-fabrication.mdc`，不并进本文件。
+
 ## 工具
 
 dtc MCP 提供：dtc_doctor（环境自检）/ dtc_sel（当前 Figma 选区）/ dtc_extract（提取规格包，参数 node 或 selection=true）/ dtc_verify（视觉回归闭环）/ dtc_read_report / dtc_fix_prompt / dtc_check（反捏造校验）。产物在项目 `.dtc/`（spec.json / design-ground-truth.json / ref/frame.png / assets/）。
 
-## 取源
-
-参数给了链接/nodeId 就用它；用户说"选中的/当前这个"或没给参数 → 先 dtc_sel 确认选区再 dtc_extract {selection: true}。
+relay 用 `dtc relay start`（3055 已有监听则复用）。通道用 `dtc plugin install` 或 `dtc setup`，主推 Figma 桌面 App → Plugins → Development → Import plugin from manifest。
 
 ## 流程（严格按序）
 
-1. `dtc_doctor` 自检；relay/插件 ❌ 时提示用户（dtc relay start / Figma 面板已连接）。
-2. `dtc_extract`（node 或 selection）→ `.dtc/` 规格包。
-3. 【人工闸口·不可跳过】读 spec.json + ref/frame.png，完整结构描述（层级+数值绑定）写入 `.dtc/structure.yaml`，跑 verify-yaml-provenance 溯源校验；**对话只报 4 行摘要**——选中节点、一两句结构概览、数量结论（N 个颜色/M 个尺寸通过、0 伪造，或 X 个未溯源已标注）、"完整结构见 .dtc/structure.yaml，确认后生成"。禁止在对话里逐项罗列颜色/字号/文案清单（用户自己看 YAML）。等用户确认再生成代码。
-4. 生成：先检测本项目技术栈并跟随惯例（框架/样式方案/组件库/目录）；数值取 ground-truth 并注释 nodeId；文案逐字 spec.text.content；素材用 .dtc/assets/ 真实切图。
-5. `dtc_verify { url }` 循环：exit=1 → 读 dtc_fix_prompt 按归因（nodeId + 期望值 vs 实际值）修复后重跑；exit=0 收敛；exit=2 停止并如实报告剩余差异，禁止谎报完成。
-6. `dtc_check { code_dir }`：UNMATCHED 项必须处理（换成 ground-truth 值或标"截图估读"）。
-7. 交付报告：文件清单、Fidelity Score 与轮次、check 结果、剩余差异。
+1. **doctor** — `dtc_doctor` 自检。relay ❌ → `dtc relay start`。插件 ❌ → `dtc plugin install`（主推桌面 App Import manifest），等 Figma 面板已连接。
+2. **取源** — 参数给了链接/nodeId 就用它，`dtc_extract { node }`。用户说「选中的/当前这个」或没给参数 → 先 `dtc_sel` 确认选区，再 `dtc_extract { selection: true }`。
+3. **4 行闸口**（不可跳过）— 读 spec.json + ref/frame.png，完整结构描述（层级+数值绑定）写入 `.dtc/structure.yaml`，跑 verify-yaml-provenance 溯源校验。**对话只报 4 行摘要**——选中节点、一两句结构概览、数量结论（N 个颜色/M 个尺寸通过、0 伪造，或 X 个未溯源已标注）、「完整结构见 .dtc/structure.yaml，确认后生成」。禁止在对话里逐项罗列颜色/字号/文案清单（用户自己看 YAML）。等用户确认再生成代码。
+4. **生成** — 数值取 ground-truth 并注释 nodeId；文案逐字 spec.text.content；素材用 .dtc/assets/ 真实切图。先检测技术栈并跟随，检测结论先说一句（「检测到 React 18 + Tailwind，将…」），再动手：
+   1. **框架**：package.json dependencies（react/vue2/3/svelte/next/nuxt/小程序…）+ 现有页面/组件写法（`.tsx` 函数组件？`<script setup>`？）。
+   2. **样式方案**：跟随项目——Tailwind（看 tailwind.config + 类名风格）、CSS Modules、styled-components、UnoCSS、原生 CSS 变量。不要在 Tailwind 项目里写 styled-components。
+   3. **设计 token 接入**：项目已有 theme/token 文件则把 ground-truth 值映射进去（如 tailwind.config 扩展色板），而不是散落硬编码；没有则建议建一份并说明。
+   4. **组件惯例**：项目有 design-system/组件库时优先用其组件还原（按 spec 的 role 对号：button→Button、card→Card…）；映射不上的用原生标签。
+   5. **路由/目录**：新页面放项目惯用的目录（pages/ 或 app/ 或 src/views），命名跟现有风格。
+   6. **单位**：项目用 rem/px/rpx（小程序）就跟随；ground-truth 是 px，rem 按 root font-size 换算并注明。
+5. **verify** — `dtc_verify { url }` 循环：exit=1 → 读 dtc_fix_prompt 按归因（nodeId + 期望值 vs 实际值）修复后重跑；exit=0 收敛；exit=2 停止并如实报告剩余差异，禁止谎报完成。
+6. **check** — `dtc_check { code_dir }`：UNMATCHED 项必须处理（换成 ground-truth 值或标「截图估读」）。
+7. **交付报告** — 文件清单、Fidelity Score 与轮次、check 结果、剩余差异。

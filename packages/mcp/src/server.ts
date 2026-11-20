@@ -58,7 +58,7 @@ server.tool(
 
 server.tool(
   "dtc_extract",
-  "从 Figma 确定性提取规格包 → .dtc/（ground-truth 数值锁 + spec + 参考图 + 真实素材切图）。前置：bun socket + Figma 插件已连 channel",
+  "从 Figma 确定性提取规格包 → .dtc/（ground-truth 数值锁 + spec + 参考图 + 真实素材切图）。前置：dtc relay start（3055 已占用则复用）+ Figma 插件已连 channel",
   {
     node: z.string().optional().describe("Figma nodeId，如 14669-9900 或 14669:9900（与 selection 二选一）"),
     selection: z.boolean().optional().describe("为 true 时取用户当前在 Figma 里选中的第一个节点（用户说'选中的/当前这个'时用）"),

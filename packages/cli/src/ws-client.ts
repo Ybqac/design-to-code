@@ -46,7 +46,7 @@ export class FigmaRelayClient {
       const fail = (msg: string) => {
         if (settled) return;
         settled = true;
-        reject(new Error(`${msg}（relay 未启动？在 ~/code/cursor-talk-to-figma-mcp 下运行 bun socket）`));
+        reject(new Error(`${msg}（relay 未启动？运行 dtc relay start；3055 已有监听则复用）`));
       };
       ws.on("unexpected-response", (_req, res) => fail(`relay ${this.url} 拒绝连接: HTTP ${res?.statusCode}`));
       ws.on("error", (err) => fail(`无法连接 relay ${this.url}: ${err.message}`));

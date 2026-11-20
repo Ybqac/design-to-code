@@ -1,7 +1,7 @@
 /**
  * dtc 内置 relay —— ws://localhost:3055 消息中转。
  *
- * 协议移植自 grab/cursor-talk-to-figma-mcp 的 src/socket.ts（MIT），与其 bun 版完全兼容：
+ * 协议移植自 grab/cursor-talk-to-figma-mcp 的 src/socket.ts（MIT），与原 socket 协议兼容（3055 已有监听则复用）：
  *  - join:    {"id"?, "type":"join","channel"} → 回 system "Joined channel: X" +
  *             system {id, result:"Connected to channel: X"}，并通知他人 "A new user has joined"
  *  - message: {"id","type":"message","channel","message":{...}} → 广播

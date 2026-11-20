@@ -1,9 +1,19 @@
 /**
- * dtc doctor —— 环境自检：Node 版本 / relay 与插件 / Playwright 浏览器 / .dtc 规格包。
+ * dtc doctor —— 环境自检。
+ * 先看安装落盘（MCP / 两条规则 / PATH 警告），再是原有四项：Node、relay+插件、chromium、.dtc。
+ * relay 探测仍是 joinTimeoutMs 3000，不拉长连接。PATH 里没有 dtc 只警告，不判失败。
  */
 import fs from "node:fs";
+import path from "node:path";
 import { dtcPaths } from "../paths.js";
 import { FigmaRelayClient } from "../ws-client.js";
+import {
+  REPO_ROOT,
+  checkMcpInstall,
+  checkRulesInstall,
+  commandExists,
+  npmGlobalPrefix,
+} from "../user-install.js";
 
 export interface DoctorOptions {
   channel?: string;
@@ -16,12 +26,29 @@ export async function runDoctor(opts: DoctorOptions): Promise<number> {
 
   console.log("dtc doctor — 环境自检\n");
 
-  // 1. Node
-  const major = parseInt(process.versions.node.split(".")[0], 10);
-  console.log(`1. Node ≥ 20: ${process.versions.node} ${major >= 20 ? "✅" : "❌"}`);
-  if (major < 20) ok = false;
+  const mcp = checkMcpInstall();
+  for (const line of mcp.lines) console.log(line);
+  if (!mcp.ok) ok = false;
 
-  // 2. relay + 插件
+  const rules = checkRulesInstall();
+  for (const line of rules.lines) console.log(line);
+  if (!rules.ok) ok = false;
+
+  if (await commandExists("dtc")) {
+    console.log("安装 · dtc PATH: ✅");
+  } else {
+    console.log("安装 · dtc PATH: ⚠️ 未在 PATH（用 node 调用 dist/bin.js 时不判失败）");
+    console.log(`   → 在 ${path.join(REPO_ROOT, "packages/cli")} 执行 npm link（目标前缀 ${npmGlobalPrefix()}）`);
+    console.log("   当前终端可用 npm run dtc --");
+  }
+
+  const major = parseInt(process.versions.node.split(".")[0] ?? "0", 10);
+  console.log(`1. Node ≥ 20: ${process.versions.node} ${major >= 20 ? "✅" : "❌"}`);
+  if (major < 20) {
+    console.log("   → 安装 Node ≥ 20");
+    ok = false;
+  }
+
   const client = new FigmaRelayClient({ joinTimeoutMs: 3000 });
   try {
     const ping = await client.ping(channel);
@@ -29,31 +56,30 @@ export async function runDoctor(opts: DoctorOptions): Promise<number> {
       console.log(`2. relay(3055) + 插件(channel "${channel}"): ✅`);
     } else if (ping.relay) {
       console.log(`2. relay(3055): ✅，插件: ❌ 未连到 channel "${channel}"`);
-      console.log(`   → 打开 Figma，运行 dtc bridge 插件（或扩展注入），等面板显示"已连接"`);
-      console.log(`   → 注意：Figma 文件首次加载可达 30s，等弹窗面板/角标就绪后再重试 doctor`);
+      console.log("   → dtc plugin install");
+      console.log("   （主推桌面 App Import manifest；Figma 文件首次加载可达 30s，面板就绪后再跑 dtc doctor）");
       ok = false;
     } else {
       console.log(`2. relay(3055): ❌ ${ping.detail ?? ""}`);
-      console.log(`   → 自动启动：dtc relay start（或一键接入：dtc setup）`);
+      console.log("   → dtc relay start");
       ok = false;
     }
   } finally {
     client.close();
   }
 
-  // 3. Playwright 浏览器
   try {
     const { chromium } = await import("playwright");
     const b = await chromium.launch();
     await b.close();
-    console.log(`3. Playwright chromium: ✅`);
-  } catch (e: any) {
-    console.log(`3. Playwright chromium: ❌ ${e.message.split("\n")[0]}`);
-    console.log(`   → npx playwright install chromium`);
+    console.log("3. Playwright chromium: ✅");
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message.split("\n")[0] : String(e);
+    console.log(`3. Playwright chromium: ❌ ${message}`);
+    console.log("   → npx playwright install chromium");
     ok = false;
   }
 
-  // 4. .dtc 规格包
   const p = dtcPaths(opts.out ?? ".dtc");
   const need = [p.manifest, p.groundTruth, p.unifiedTree, p.refImage];
   const missing = need.filter((f) => !fs.existsSync(f));
@@ -62,7 +88,7 @@ export async function runDoctor(opts: DoctorOptions): Promise<number> {
     const rich = (manifest.plugin_capabilities ?? []).some((c: string) => c.startsWith("rich-fields"));
     console.log(`4. .dtc 规格包: ✅（node ${manifest.node_id}，via ${manifest.via}${rich ? "，含富字段" : "，⚠️ 无 auto-layout 富字段，建议换增强插件重新 extract"}）`);
   } else {
-    console.log(`4. .dtc/ 规格包: ⏳ 尚未提取（属预期——首次 dtc extract 后自动生成，无需预先准备）`);
+    console.log("4. .dtc/ 规格包: ⏳ 尚未提取（属预期——首次 dtc extract 后自动生成，无需预先准备）");
   }
 
   console.log(ok ? "\n✅ doctor 通过" : "\n❌ doctor 未通过（按上面提示修复）");

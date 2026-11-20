@@ -6,6 +6,8 @@ alwaysApply: false
 
 # 技术栈自适应
 
+安装器不再拷贝本文件。下面 6 条已并入 `integrations/cursor/rules-global/dtc-workflow.mdc`。
+
 生成代码前先检测，生成时跟随：
 
 1. **框架**：package.json dependencies（react/vue2/3/svelte/next/nuxt/小程序…）+ 现有页面/组件写法（`.tsx` 函数组件？`<script setup>`？）。

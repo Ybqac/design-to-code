@@ -1,8 +1,9 @@
 {
+  "_comment": "文档示例，不是模板。由 dtc setup 写入 ~/.cursor/mcp.json：command 为 node，args[0] 为本机 packages/mcp/dist/server.js 的绝对路径。不要手填占位符，不要写入 PAT。",
   "mcpServers": {
     "dtc": {
       "command": "node",
-      "args": ["__DTC_REPO__/packages/mcp/dist/server.js"]
+      "args": ["<dtc setup 写入的 server.js 绝对路径>"]
     }
   }
 }

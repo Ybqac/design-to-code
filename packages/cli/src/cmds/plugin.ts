@@ -13,6 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { channelGuideLines } from "../channel-guide.js";
 
 export interface PluginOptions {
   src?: string;
@@ -145,41 +146,47 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:4px}</style>
     // 4. web 安装说明
     fs.writeFileSync(
       path.join(webDir, "README.md"),
-      `# 浏览器通道安装（装一次，长期用）
+      `# 通道安装（装一次，长期用）
 
-## 首选：Chromium 扩展（无需任何额外扩展管理器）
+## 主推：Figma 桌面 App
+Figma 桌面 App → Plugins → Development → Import plugin from manifest → 选 \`../desktop/manifest.json\`（一次导入永久用）。
+
+## 次级
+
+### 扩展
 产物：\`../dtc-bridge-chrome-extension.zip\`（源目录 \`../chrome-extension/\`）
 1. 解压 zip 得到 chrome-extension 文件夹。
 2. 打开 \`chrome://extensions\`，开启「开发者模式」。
 3. 把文件夹拖入扩展页，或点「加载已解压的扩展程序」选择该文件夹。
 4. 打开 figma.com 设计文件，右上角绿色角标 \`dtc: ✅ channel dtc 已就绪\` 即成功
-   （角标可点击切换 channel；断线自动重连；relay 需先启动 \`bun socket\`）。
+   （角标可点击切换 channel；断线自动重连；relay 需先 \`dtc relay start\`，3055 已占用则复用）。
 注意：开发者模式安装的扩展，Chrome 启动时可能提示「关闭开发者模式扩展」——选择保留即可。
 不需要用「打包扩展程序」按钮：它生成 .crx（商店分发格式），本地 .crx 会被 Chrome 拦截。
 
-## 备选 1：用户脚本（Tampermonkey）
+### 用户脚本（Tampermonkey）
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 浏览器扩展（一次）。
 2. 把 \`dtc-bridge.user.js\` **拖入浏览器窗口**（或 Tampermonkey 面板 → 添加新脚本 → 粘贴全文 → 保存）。
 
-## 备选 2：书签栏（零扩展）
+### 书签栏
 打开 \`dtc-bridge.bookmarklet.html\`，把「▶ dtc bridge」按钮拖到书签栏；在 Figma 页面点一下即注入（每次刷新后需重点一次）。
 
-## 兜底链（任一档可用即满足长期使用）
-1. Chromium 扩展（chrome://extensions 加载已解压 / 拖 zip）
-2. 用户脚本（Tampermonkey）
-3. 书签（零依赖，手动点击）
-4. Figma 桌面 App → Plugins → Development → Import plugin from manifest → 选 \`../desktop/manifest.json\`（一次导入永久用，不依赖页面注入机制，长期最稳）
-5. 旧式 console 粘贴（应急，见 docs/ 附录）
+## 兜底链
+1. Figma 桌面 App → Plugins → Development → Import plugin from manifest（主推，不依赖页面注入）
+2. Chromium 扩展
+3. 用户脚本 dtc-bridge.user.js
+4. 书签
+5. 旧式 console 粘贴（应急，见仓库 README「排错」）
 
 ## 注入机制说明（重要）
 浏览器页面上下文是否存在 \`figma\` 插件全局对象由 Figma web 端决定。历史上 console 粘贴
 \`console-injection.js\` 可用（本仓库实测），扩展/用户脚本以相同上下文注入，理论等价；但 Figma
-前端变更可能使其失效。角标自诊断会明确提示；失效时走兜底链 4（桌面 App 插件）。
+前端变更可能使其失效。角标自诊断会明确提示；失效时走主推（桌面 App Import manifest）。
+排错见仓库 README「排错」。
 `,
     );
 
     console.log(`✅ plugin build → ${distDir}/`);
-    console.log(`   desktop/                          Figma 桌面 App：Plugins → Development → Import plugin from manifest`);
+    console.log(`   desktop/                          主推 · Figma 桌面 App：Plugins → Development → Import plugin from manifest`);
     console.log(`   dtc-bridge-chrome-extension.zip   Chromium 扩展：chrome://extensions 开发者模式 → 拖入/加载已解压`);
     console.log(`   web/dtc-bridge.user.js            用户脚本（Tampermonkey 拖入即装）`);
     console.log(`   web/dtc-bridge.bookmarklet.html   书签栏版（零扩展，点一下注入）`);
@@ -189,27 +196,14 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:4px}</style>
     if (!fs.existsSync(path.join(distDir, "web", "dtc-bridge.user.js"))) {
       await runPlugin("build", opts);
     }
-    const zipPath = path.join(distDir, "dtc-bridge-chrome-extension.zip");
     console.log(`
-📦 安装指引（channel 默认 dtc，与 dtc extract --channel 一致）
+📦 通道安装（channel 默认 dtc，与 dtc extract --channel 一致）
 
-[浏览器·首选] Chromium 扩展（无需 Tampermonkey）
-  1. 解压 ${zipPath} 得到 chrome-extension 文件夹
-  2. 打开 chrome://extensions，开「开发者模式」
-  3. 把文件夹拖入扩展页（或点「加载已解压的扩展程序」选择它）
-  4. 打开 Figma 设计文件 → 右上角绿色角标即就绪
-     （Chrome 启动提示"关闭开发者模式扩展"时选择保留）
+${channelGuideLines(distDir).join("\n")}
 
-[浏览器·备选] 用户脚本 / 书签
-  Tampermonkey 装好后拖入 ${path.join(distDir, "web", "dtc-bridge.user.js")}；
-  或打开 ${path.join(distDir, "web", "dtc-bridge.bookmarklet.html")} 拖书签
-
-[桌面 App·最稳] 不依赖页面注入机制
-  Figma 桌面 App → Plugins → Development → Import plugin from manifest
-  → 选择 ${path.join(distDir, "desktop", "manifest.json")}（一次导入永久存在）
-
-前置：relay 需运行 —— 在 ~/code/cursor-talk-to-figma-mcp 下执行 bun socket
-验证：dtc doctor（relay + 插件双 ✅）
+relay：dtc relay start（3055 已被占用则复用，不重复启动）
+验证：dtc doctor
+排错：仓库 README「排错」
 插件名：${manifest.name}
 `);
   } else {
