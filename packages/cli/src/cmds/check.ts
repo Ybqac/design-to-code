@@ -10,8 +10,10 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import type { GroundTruth } from "@dtc/core";
+import { parseGroundTruth, parseRawFigmaSnapshot, type GroundTruth } from "@dtc/core";
+import { consoleLogger, type Logger } from "../logger.js";
 import { dtcPaths } from "../paths.js";
+import { parseJsonFile } from "../read-json.js";
 
 export interface CheckOptions {
   codeDir: string;
@@ -36,6 +38,12 @@ function collectRealValues(snapshot: any) {
   let nodeCount = 0;
   const real = { colors: new Set<string>(), fontSizes: new Set<number>(), spacings: new Set<number>(), radii: new Set<number>(), nodeIds: new Set<string>() };
   const walk = (node: any) => {
+    if (!node || typeof node !== "object") return;
+    // 与 ground-truth 一致：跳过 visible===false 的节点本身，仍遍历其子节点
+    if (node.visible === false) {
+      for (const c of node.children ?? []) walk(c);
+      return;
+    }
     nodeCount++;
     if (node.id) real.nodeIds.add(node.id);
     const addPaint = (arr: any[]) => {
@@ -52,10 +60,6 @@ function collectRealValues(snapshot: any) {
     for (const key of ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "itemSpacing", "counterAxisSpacing"]) {
       if (node[key] != null) real.spacings.add(Number(node[key]));
     }
-    if (node.absoluteBoundingBox) {
-      real.spacings.add(Number(node.absoluteBoundingBox.width));
-      real.spacings.add(Number(node.absoluteBoundingBox.height));
-    }
     for (const c of node.children ?? []) walk(c);
   };
   const snap: any = snapshot;
@@ -66,7 +70,12 @@ function collectRealValues(snapshot: any) {
   return { nodeCount, real };
 }
 
-export function runProvenance(gt: GroundTruth, snapshot: any, log = true): { forged: Forged[]; coverageLow: boolean; nodeCount: number } {
+export function runProvenance(
+  gt: GroundTruth,
+  snapshot: any,
+  log: boolean | Logger = true,
+): { forged: Forged[]; coverageLow: boolean; nodeCount: number } {
+  const logger = log === false ? undefined : log === true ? consoleLogger : log;
   const { nodeCount, real } = collectRealValues(snapshot);
   const forged: Forged[] = [];
 
@@ -89,16 +98,16 @@ export function runProvenance(gt: GroundTruth, snapshot: any, log = true): { for
   }
   const coverageLow = coverage < 0.2;
 
-  if (log) {
-    console.log(`=== A. 溯源校验（gt ↔ 原始节点树）===`);
-    console.log(`节点树 ${nodeCount} 个节点；颜色 ${real.colors.size} / 字号 ${real.fontSizes.size} / 间距 ${real.spacings.size} / 圆角 ${real.radii.size} 个真实值`);
-    console.log(`raw_styles 覆盖率: ${rawCount}/${nodeCount} = ${(coverage * 100).toFixed(1)}%${coverageLow ? " ❌（<20%）" : " ✅"}`);
+  if (logger) {
+    logger.log(`=== A. 溯源校验（gt ↔ 原始节点树）===`);
+    logger.log(`节点树 ${nodeCount} 个节点；颜色 ${real.colors.size} / 字号 ${real.fontSizes.size} / 间距 ${real.spacings.size} / 圆角 ${real.radii.size} 个真实值`);
+    logger.log(`raw_styles 覆盖率: ${rawCount}/${nodeCount} = ${(coverage * 100).toFixed(1)}%${coverageLow ? " ❌（<20%）" : " ✅"}`);
     if (forged.length) {
-      console.log(`🔴 [FORGED] ${forged.length} 项无法溯源:`);
-      for (const f of forged.slice(0, 10)) console.log(`   ${f.type} ${String(f.value)} — ${f.reason}`);
-      if (forged.length > 10) console.log(`   ... 还有 ${forged.length - 10} 项`);
+      logger.log(`🔴 [FORGED] ${forged.length} 项无法溯源:`);
+      for (const f of forged.slice(0, 10)) logger.log(`   ${f.type} ${String(f.value)} — ${f.reason}`);
+      if (forged.length > 10) logger.log(`   ... 还有 ${forged.length - 10} 项`);
     } else {
-      console.log(`✅ 所有 token/raw_styles 值都能在原始节点树里找到出处`);
+      logger.log(`✅ 所有 token/raw_styles 值都能在原始节点树里找到出处`);
     }
   }
   return { forged, coverageLow, nodeCount };
@@ -116,7 +125,7 @@ const TW_SIZE_RE = /(?:text|w|h|gap|p|m|rounded)-\[(\d+)(px|rpx|rem|em)?\]/g;
 const CSS_NUM_RE = /(?:(?:font-size|border-radius|gap|padding|margin|width|height)\s*:\s*)(\d+)(px|rpx|rem|em)?/gi;
 const INLINE_SIZE_RE = /(?:fontSize|borderRadius|gap|padding|margin|width|height)\s*:\s*(?:['"]?)(\d+)(px|rpx|rem|em)?/gi;
 const PLACEHOLDER_URL_RE = /placeholder\.(?:com|co)|picsum\.photos|via\.placeholder|loremflickr|lorem\.picsum|unsplash\.com/i;
-const PENDING_RE = /估读|pending|待核实|todo|截图/i;
+const PENDING_RE = /估读|pending|待核实/i;
 
 export interface ScanResult {
   level: "UNMATCHED" | "PENDING";
@@ -185,7 +194,7 @@ export function scanCode(codeDir: string, gt: GroundTruth | null): ScanResult[] 
     const lines = fs.readFileSync(file, "utf8").split(/\r?\n/);
     lines.forEach((line, i) => {
       const lineNo = i + 1;
-      const pending = PENDING_RE.test(line) || PENDING_RE.test(lines[i + 1] ?? "");
+      const pending = PENDING_RE.test(line);
       let m: RegExpMatchArray | null;
 
       if ((m = line.match(PLACEHOLDER_URL_RE))) {
@@ -237,44 +246,44 @@ export function scanCode(codeDir: string, gt: GroundTruth | null): ScanResult[] 
 // 命令入口
 // ---------------------------------------------------------------------------
 
-export async function runCheck(opts: CheckOptions): Promise<number> {
+export async function runCheck(opts: CheckOptions, logger: Logger = consoleLogger): Promise<number> {
   const p = dtcPaths(opts.out ?? ".dtc");
   if (!fs.existsSync(p.groundTruth)) throw new Error(`ground-truth 不存在: ${p.groundTruth}（先运行 dtc extract）`);
-  const gt: GroundTruth = JSON.parse(fs.readFileSync(p.groundTruth, "utf8"));
+  const gt: GroundTruth = parseJsonFile(p.groundTruth, parseGroundTruth);
 
   let failed = false;
 
   if (!opts.skipProvenance) {
     if (fs.existsSync(p.rawSnapshot)) {
-      const snapshot = JSON.parse(fs.readFileSync(p.rawSnapshot, "utf8"));
-      const { forged, coverageLow } = runProvenance(gt, snapshot);
+      const snapshot = parseJsonFile(p.rawSnapshot, parseRawFigmaSnapshot);
+      const { forged, coverageLow } = runProvenance(gt, snapshot, logger);
       if (forged.length || coverageLow) failed = true;
     } else {
-      console.log(`⚠️ raw-node-snapshot.json 不存在，跳过溯源校验`);
+      logger.log(`⚠️ raw-node-snapshot.json 不存在，跳过溯源校验`);
     }
   }
 
   if (!opts.skipScan) {
-    console.log(`\n=== B. 代码扫描（硬编码值 ↔ ground-truth）===`);
+    logger.log(`\n=== B. 代码扫描（硬编码值 ↔ ground-truth）===`);
     const results = scanCode(opts.codeDir, gt);
     const unmatched = results.filter((r) => r.level === "UNMATCHED");
     const pending = results.filter((r) => r.level === "PENDING");
     if (results.length === 0) {
-      console.log(`✅ 未发现未溯源的硬编码颜色/尺寸`);
+      logger.log(`✅ 未发现未溯源的硬编码颜色/尺寸`);
     } else {
-      console.log(`命中 ${results.length} 项（UNMATCHED ${unmatched.length}，PENDING ${pending.length}）`);
+      logger.log(`命中 ${results.length} 项（UNMATCHED ${unmatched.length}，PENDING ${pending.length}）`);
       if (unmatched.length) {
-        console.log(`🔴 [UNMATCHED] 必须处理:`);
-        for (const r of unmatched.slice(0, 20)) console.log(`   ${r.file}:${r.line}  ${r.value.padEnd(14)} (${r.kind})`);
-        if (unmatched.length > 20) console.log(`   ... 还有 ${unmatched.length - 20} 项`);
+        logger.log(`🔴 [UNMATCHED] 必须处理:`);
+        for (const r of unmatched.slice(0, 20)) logger.log(`   ${r.file}:${r.line}  ${r.value.padEnd(14)} (${r.kind})`);
+        if (unmatched.length > 20) logger.log(`   ... 还有 ${unmatched.length - 20} 项`);
         failed = true;
       }
       if (pending.length) {
-        console.log(`🟡 [PENDING] 已标估读，需进交付清单: ${pending.length} 项`);
+        logger.log(`🟡 [PENDING] 已标估读，需进交付清单: ${pending.length} 项`);
       }
     }
   }
 
-  console.log(failed ? `\n❌ check 未通过` : `\n✅ check 通过`);
+  logger.log(failed ? `\n❌ check 未通过` : `\n✅ check 通过`);
   return failed ? 1 : 0;
 }

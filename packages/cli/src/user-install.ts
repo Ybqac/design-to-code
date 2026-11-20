@@ -70,7 +70,7 @@ export function readJsonObject(
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       return { ok: false, error: "根节点不是对象" };
     }
-    return { ok: true, value };
+    return { ok: true, value: value as Record<string, unknown> };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }

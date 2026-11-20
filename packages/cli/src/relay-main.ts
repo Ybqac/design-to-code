@@ -3,10 +3,11 @@
  * 日志由父进程重定向到 ~/.dtc/relay.log。
  */
 import { startRelay } from "./relay-server.js";
+import { ensureRelayToken } from "./relay-token.js";
 
 const port = Number(process.env.DTC_RELAY_PORT || 3055);
 
-startRelay(port, (...args) => console.log(new Date().toISOString(), ...args))
+startRelay(port, (...args) => console.log(new Date().toISOString(), ...args), { token: ensureRelayToken() })
   .then(() => {
     console.log(`dtc relay 就绪: ws://localhost:${port}（channel 任意，dtc 工具默认用 "dtc"）`);
   })

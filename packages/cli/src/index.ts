@@ -7,6 +7,8 @@ export type { VerifyOptions } from "./cmds/verify.js";
 export { runCheck, runProvenance, scanCode } from "./cmds/check.js";
 export type { CheckOptions, ScanResult } from "./cmds/check.js";
 export { runDoctor } from "./cmds/doctor.js";
+export { consoleLogger } from "./logger.js";
+export type { Logger } from "./logger.js";
 export { runPlugin } from "./cmds/plugin.js";
 export { FigmaRelayClient, normalizeNodeId, nodeIdToFileName } from "./ws-client.js";
 export { dtcPaths, nextRound, reportPath } from "./paths.js";

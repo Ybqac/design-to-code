@@ -12,6 +12,7 @@ import { channelGuideLines } from "../channel-guide.js";
 import { FigmaRelayClient } from "../ws-client.js";
 import { runDoctor } from "./doctor.js";
 import { relayUp, runRelay } from "./relay.js";
+import { runPlugin } from "./plugin.js";
 import {
   REPO_ROOT,
   applyGlobalInstall,
@@ -93,6 +94,14 @@ export async function runSetup(opts: SetupOptions): Promise<number> {
     console.log("→ 自动启动内置 relay（后台守护，日志 ~/.dtc/relay.log）...");
     const code = await runRelay("start");
     if (code !== 0) ok = false;
+  }
+  try {
+    await runPlugin("build", {});
+    console.log("relay 口令已写入 plugin/build。重新打开 Figma 插件即可，不用手填");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.log(`❌ 插件构建失败：${message}`);
+    ok = false;
   }
 
   step(4, total, "Cursor 全局接入");

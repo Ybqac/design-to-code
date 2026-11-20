@@ -30,9 +30,8 @@ program
   .option("--out <dir>", "输出目录", ".dtc")
   .option("--viewport <wxh>", "视口（默认取节点尺寸）")
   .option("--ref-scale <n>", "参考图倍率", "2")
-  .option("--from-rest", "走 Figma REST API（需 --file-key --pat，受限流）")
+  .option("--from-rest", "走 Figma REST API（需 --file-key 与环境变量 FIGMA_TOKEN，受限流）")
   .option("--file-key <key>")
-  .option("--pat <token>")
   .option("--from-snapshot <file>", "从本地快照 JSON 重放（离线）")
   .option("--max-assets <n>", "素材导出上限", "60")
   .action(async (opts) => {
@@ -45,7 +44,6 @@ program
       refScale: Number(opts.refScale),
       fromRest: opts.fromRest,
       fileKey: opts.fileKey,
-      pat: opts.pat,
       fromSnapshot: opts.fromSnapshot,
       maxAssets: Number(opts.maxAssets),
     });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   attributeRegions,
+  regionToFigma,
   buildGroundTruth,
   buildSpec,
   clusterDiffPixels,
@@ -235,7 +236,7 @@ describe("attribute", () => {
     const regions = attributeRegions(
       [{ id: "r1", bbox: { x: 0, y: 500, width: 360, height: 60 }, diffPixels: 5000, severity: "high", attributedNodes: [] }],
       root,
-      { scale: 1, offsetX: 100, offsetY: 200 },
+      { scaleX: 1, scaleY: 1, offsetX: 100, offsetY: 200 },
       gt,
       new Map(),
     );
@@ -244,6 +245,13 @@ describe("attribute", () => {
     expect(ids).toContain("14669:9901");
     const btn = regions[0].attributedNodes.find((n) => n.nodeId === "14669:9901");
     expect(btn?.expected?.background).toBe("#3b82f6");
+  });
+
+  it("X/Y 使用各自的缩放，不共用一个 scale", () => {
+    expect(regionToFigma(
+      { x: 10, y: 20, width: 30, height: 40 },
+      { scaleX: 2, scaleY: 0.5, offsetX: 1, offsetY: 2 },
+    )).toEqual({ x: 21, y: 12, width: 60, height: 20 });
   });
 });
 
@@ -274,6 +282,22 @@ describe("score & convergence", () => {
     expect(sc.score).toBe(0);
     expect(sc.mismatches.map((m) => m.kind)).toContain("fontSize");
     expect(sc.mismatches.map((m) => m.kind)).toContain("color");
+  });
+
+  it("相同文案按出现顺序配对，字重不一致单独记 mismatch", () => {
+    const sc = structureCheck(
+      [
+        { content: "确定", fontSize: 14, color: "rgb(0, 0, 0)", fontWeight: "400" },
+        { content: "确定", fontSize: 18, color: "rgb(0, 0, 0)", fontWeight: "bold" },
+      ],
+      [
+        { nodeId: "1:1", content: "确定", fontSize: 14, textColor: "#000000", fontWeight: 400 },
+        { nodeId: "1:2", content: "确定", fontSize: 20, textColor: "#000000", fontWeight: 400 },
+      ],
+    );
+    expect(sc.textMatched).toBe(1);
+    expect(sc.mismatches.filter((m) => m.kind === "fontSize").map((m) => m.nodeId)).toEqual(["1:2"]);
+    expect(sc.mismatches.filter((m) => m.kind === "fontWeight").map((m) => m.nodeId)).toEqual(["1:2"]);
   });
 });
 

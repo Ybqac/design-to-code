@@ -1,7 +1,13 @@
 /** 内置 relay 协议测试：join 回包、广播互通、跨客户端命令-响应模拟 */
 import { afterAll, beforeAll, expect, it } from "vitest";
 import WebSocket from "ws";
+import { commandLooksLikeRelay } from "./cmds/relay.js";
 import { startRelay, type RelayHandle } from "./relay-server.js";
+
+it("pid 命令行必须含 relay-main 才停", () => {
+  expect(commandLooksLikeRelay("node /a/relay-main.js")).toBe(true);
+  expect(commandLooksLikeRelay("node /a/server.js")).toBe(false);
+});
 
 let relay: RelayHandle;
 const PORT = 3090 + Math.floor(Math.random() * 200);
@@ -38,19 +44,25 @@ function waitOpen(ws: WebSocket): Promise<void> {
   });
 }
 
+const TOKEN = "test-token";
+
 beforeAll(async () => {
-  relay = await startRelay(PORT);
+  relay = await startRelay(PORT, () => {}, { token: TOKEN });
 });
 
 afterAll(async () => {
   await relay.close();
 });
 
+it("只监听 127.0.0.1", () => {
+  expect(relay.host).toBe("127.0.0.1");
+});
+
 it("join 回包并通知在场成员；广播互通", async () => {
   const a = new WebSocket(`ws://localhost:${PORT}`);
   const qa = queued(a);
   await waitOpen(a);
-  a.send(JSON.stringify({ type: "join", channel: "t1", id: "j1" }));
+  a.send(JSON.stringify({ type: "join", channel: "t1", id: "j1", token: TOKEN }));
   const welcome = await qa.next();
   expect(welcome.type).toBe("system"); // welcome
   const joinedStr = await qa.next();
@@ -61,7 +73,7 @@ it("join 回包并通知在场成员；广播互通", async () => {
   const b = new WebSocket(`ws://localhost:${PORT}`);
   const qb = queued(b);
   await waitOpen(b);
-  b.send(JSON.stringify({ type: "join", channel: "t1" }));
+  b.send(JSON.stringify({ type: "join", channel: "t1", token: TOKEN }));
   (await qb.next()); // welcome
   (await qb.next()); // joined
   (await qb.next()); // connected
@@ -93,4 +105,20 @@ it("未 join 就发消息 → 收到 error", async () => {
   const err = await qc.next();
   expect(err.type).toBe("error");
   c.close();
+});
+
+it("token 不对就不能 join", async () => {
+  const d = new WebSocket(`ws://127.0.0.1:${PORT}`);
+  const qd = queued(d);
+  await waitOpen(d);
+  d.send(JSON.stringify({ type: "join", channel: "t1", id: "bad", token: "nope" }));
+  const welcome = await qd.next();
+  expect(welcome.type).toBe("system");
+  const err = await qd.next();
+  expect(err.type).toBe("error");
+  expect(err.message).toBe("invalid relay token");
+  d.send(JSON.stringify({ id: "x", type: "message", channel: "t1", message: { id: "x", command: "ping" } }));
+  const denied = await qd.next();
+  expect(denied.type).toBe("error");
+  d.close();
 });

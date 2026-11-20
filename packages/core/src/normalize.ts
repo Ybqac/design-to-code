@@ -8,7 +8,7 @@
  *    字段最全，但受限流。
  * 归一化后下游只见 UnifiedNode，不关心来源。
  */
-import { UnifiedNode, type Effect, type Paint } from "./schema.js";
+import type { Effect, Paint, UnifiedNode } from "./schema.js";
 
 // ---------------------------------------------------------------------------
 // 颜色工具

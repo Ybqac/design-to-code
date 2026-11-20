@@ -36,7 +36,7 @@ fusion 双源思想不变：**截图定结构与布局，节点树定数值 grou
 
 ## 数据通道
 
-主通道：`dtc relay start`（ws://localhost:3055；端口已被占用则复用）+ Design-to-Code Bridge（channel `dtc`）。装通道：`dtc plugin install` 或 `dtc setup`。备份：`dtc extract --from-rest --file-key <key> --pat <PAT>`（受 Figma 限流；PAT 只走该参数）。兜底：`dtc extract --from-snapshot <json>`。
+主通道：`dtc relay start`（ws://127.0.0.1:3055；端口已被占用则复用）+ Design-to-Code Bridge（channel `dtc`）。口令在 `dtc plugin build` / `dtc setup` 时写入插件，不用手填。装通道：`dtc plugin install` 或 `dtc setup`。备份：`dtc extract --from-rest --file-key <key>`（受 Figma 限流；token 用环境变量 `FIGMA_TOKEN`）。兜底：`dtc extract --from-snapshot <json>`。
 
 ## 反捏造四红线
 

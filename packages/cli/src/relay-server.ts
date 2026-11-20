@@ -10,17 +10,33 @@
  *  - 断开: 从所有 channel 移除，通知同 channel 他人 "A user has left the channel"
  */
 import { WebSocketServer, WebSocket } from "ws";
+import { RELAY_HOST } from "./relay-token.js";
 
 export interface RelayHandle {
   port: number;
+  host: string;
   close(): Promise<void>;
 }
 
-export function startRelay(port: number, log: (...args: unknown[]) => void = () => {}): Promise<RelayHandle> {
+export interface StartRelayOptions {
+  /** join 必须带上同一口令。CLI 读 ~/.dtc/relay.token，插件在 dtc plugin build 时写入。 */
+  token: string;
+  /** 默认 127.0.0.1，不监听局域网网卡。 */
+  host?: string;
+}
+
+export function startRelay(
+  port: number,
+  log: (...args: unknown[]) => void = () => {},
+  opts: StartRelayOptions,
+): Promise<RelayHandle> {
+  if (!opts?.token) return Promise.reject(new Error("relay token 不能为空"));
+  const token = opts.token;
+  const host = opts.host ?? RELAY_HOST;
   return new Promise((resolve, reject) => {
     const channels = new Map<string, Set<WebSocket>>();
 
-    const wss = new WebSocketServer({ port });
+    const wss = new WebSocketServer({ port, host });
 
     wss.on("error", (err: NodeJS.ErrnoException) => reject(new Error(`relay 端口 ${port} 启动失败: ${err.message}`)));
 
@@ -40,8 +56,12 @@ export function startRelay(port: number, log: (...args: unknown[]) => void = () 
         if (data.type === "join") {
           const channelName = data.channel;
           if (!channelName || typeof channelName !== "string") {
-            ws.send(JSON.stringify({ type: "error", message: "Channel name is required" }));
-          return;
+            ws.send(JSON.stringify({ type: "error", message: "Channel name is required", id: data.id }));
+            return;
+          }
+          if (data.token !== token) {
+            ws.send(JSON.stringify({ type: "error", message: "invalid relay token", id: data.id }));
+            return;
           }
           if (!channels.has(channelName)) channels.set(channelName, new Set());
           const clients = channels.get(channelName)!;
@@ -117,9 +137,10 @@ export function startRelay(port: number, log: (...args: unknown[]) => void = () 
     });
 
     wss.on("listening", () => {
-      log(`WebSocket server running on port ${port}`);
+      log(`WebSocket server running on ${host}:${port}`);
       resolve({
         port,
+        host,
         close: () =>
           new Promise<void>((res) => {
             for (const clients of channels.values()) {

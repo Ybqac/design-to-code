@@ -3,7 +3,7 @@
  *
  * 数据通道：
  *  1. 默认：TalkToFigma 插件 ws 通道（dtc relay start；3055 已有监听则复用。插件连到 --channel）
- *  2. --from-rest：Figma REST API（需 PAT，受限流，CI/无桌面端备用）
+ *  2. --from-rest：Figma REST API（环境变量 FIGMA_TOKEN，受限流，CI/无桌面端备用）
  *  3. --from-snapshot：直接读之前落盘的原始 JSON（离线重放/调试）
  *
  * 产物（.dtc/）：
@@ -21,6 +21,7 @@ import {
   normalizeTalkToFigma,
 } from "@dtc/core";
 import type { UnifiedNode } from "@dtc/core";
+import { consoleLogger, type Logger } from "../logger.js";
 import { dtcPaths } from "../paths.js";
 import { FigmaRelayClient, nodeIdToFileName, normalizeNodeId } from "../ws-client.js";
 
@@ -41,7 +42,7 @@ export interface ExtractOptions {
 
 const TOOL_VERSION = "dtc-cli 0.1.0";
 
-export async function runExtract(opts: ExtractOptions): Promise<void> {
+export async function runExtract(opts: ExtractOptions, logger: Logger = consoleLogger): Promise<void> {
   if (!opts.node && !opts.selection && !opts.fromSnapshot) {
     throw new Error("需要 --node <14669-9900> 或 --selection（取当前选区）或 --from-snapshot <json>；选中清单可用 dtc sel 查看");
   }
@@ -51,11 +52,11 @@ export async function runExtract(opts: ExtractOptions): Promise<void> {
   } else if (opts.selection) {
     const { fetchSelection } = await import("./sel.js");
     const channel = opts.channel ?? "dtc";
-    console.log(`→ 读取当前选区（channel "${channel}"）...`);
+    logger.log(`→ 读取当前选区（channel "${channel}"）...`);
     const sel = await fetchSelection(channel, opts.channelUrl);
     if (sel.length === 0) throw new Error("Figma 里没有选中节点——点选目标 Frame 后重试，或改用 --node <id>");
     nodeId = sel[0].id;
-    console.log(`✓ 选中 ${sel.length} 个节点，取第一个: ${sel[0].name} (${nodeId})${sel.length > 1 ? `（其余 ${sel.length - 1} 个见 dtc sel）` : ""}`);
+    logger.log(`✓ 选中 ${sel.length} 个节点，取第一个: ${sel[0].name} (${nodeId})${sel.length > 1 ? `（其余 ${sel.length - 1} 个见 dtc sel）` : ""}`);
   }
   const outDir = opts.out ?? ".dtc";
   const p = dtcPaths(outDir);
@@ -70,34 +71,39 @@ export async function runExtract(opts: ExtractOptions): Promise<void> {
     rawSnapshot = JSON.parse(fs.readFileSync(opts.fromSnapshot, "utf8"));
     via = `dtc-extract snapshot(${path.basename(opts.fromSnapshot)})`;
   } else if (opts.fromRest) {
-    const { fileKey, pat } = opts;
-    if (!fileKey || !pat) throw new Error("--from-rest 需要 --file-key 与 --pat（Figma personal access token）");
-    console.log(`→ REST 通道: files/${fileKey}/nodes/${nodeId} ...`);
-    const res = await fetch(`https://api.figma.com/v1/files/${fileKey}/nodes?ids=${encodeURIComponent(nodeId)}`, {
+    const { fileKey } = opts;
+    const pat = opts.pat || process.env.FIGMA_TOKEN;
+    if (!fileKey || !pat) throw new Error("--from-rest 需要 --file-key，以及环境变量 FIGMA_TOKEN");
+    logger.log(`→ REST 通道: files/${fileKey}/nodes/${nodeId} ...`);
+    const res = await fetch(`https://api.figma.com/v1/files/${encodeURIComponent(fileKey)}/nodes?ids=${encodeURIComponent(nodeId)}`, {
       headers: { "X-Figma-Token": pat },
+      signal: AbortSignal.timeout(30_000),
     });
-    if (!res.ok) throw new Error(`Figma REST ${res.status}: ${await res.text()}`);
+    if (!res.ok) {
+      const body = (await res.text()).slice(0, 300);
+      throw new Error(`Figma REST ${res.status}: ${body}`);
+    }
     rawSnapshot = await res.json();
     via = "dtc-extract rest";
   } else {
     const channel = opts.channel ?? "dtc";
     const client = new FigmaRelayClient(opts.channelUrl ? { url: opts.channelUrl } : {});
     try {
-      console.log(`→ 插件 ws 通道: join channel "${channel}" ...`);
+      logger.log(`→ 插件 ws 通道: join channel "${channel}" ...`);
       await client.join(channel);
-      console.log(`→ get_node_info(${nodeId}) ...`);
+      logger.log(`→ get_node_info(${nodeId}) ...`);
       rawSnapshot = await client.send("get_node_info", { nodeId }, 60_000);
 
-      console.log(`→ export_node_as_image(根节点, scale=${opts.refScale ?? 2}) → ref/frame.png ...`);
+      logger.log(`→ export_node_as_image(根节点, scale=${opts.refScale ?? 2}) → ref/frame.png ...`);
       const img = await client.send<any>("export_node_as_image", { nodeId, scale: opts.refScale ?? 2 }, 120_000);
       if (img?.imageData) {
         fs.writeFileSync(p.refImage, Buffer.from(img.imageData, "base64"));
       } else {
-        console.warn(`⚠️ 参考图导出失败：${JSON.stringify(img).slice(0, 120)}`);
+        logger.warn(`⚠️ 参考图导出失败：${JSON.stringify(img).slice(0, 120)}`);
       }
       via = `dtc-extract talktofigma-ws(channel=${channel})`;
       void capabilities;
-      capabilities = (await extractAssets(client, nodeId, p, opts)).capabilities;
+      capabilities = (await extractAssets(client, rawSnapshot, p, opts, logger)).capabilities;
     } finally {
       client.close();
     }
@@ -149,15 +155,15 @@ export async function runExtract(opts: ExtractOptions): Promise<void> {
 
   // 摘要
   const assetCount = assetMap.size;
-  console.log(`\n✅ 提取完成 → ${p.root}/`);
-  console.log(`   节点树: ${countNodes(root)} 个节点（${countTexts(root)} 文本 / ${assetCount} 素材）`);
-  console.log(`   ground-truth raw_styles: ${gt.raw_styles.length} 条`);
-  console.log(`   tokens: 颜色 ${gt.tokens?.colors.length ?? 0} / 字体 ${gt.tokens?.typography.length ?? 0} / 间距 ${gt.tokens?.spacing.length ?? 0} / 圆角 ${gt.tokens?.radius.length ?? 0}`);
-  console.log(`   视口: ${viewport.width}x${viewport.height}，能力: ${capabilities.join(", ") || "基础字段（旧版插件）"}`);
+  logger.log(`\n✅ 提取完成 → ${p.root}/`);
+  logger.log(`   节点树: ${countNodes(root)} 个节点（${countTexts(root)} 文本 / ${assetCount} 素材）`);
+  logger.log(`   ground-truth raw_styles: ${gt.raw_styles.length} 条`);
+  logger.log(`   tokens: 颜色 ${gt.tokens?.colors.length ?? 0} / 字体 ${gt.tokens?.typography.length ?? 0} / 间距 ${gt.tokens?.spacing.length ?? 0} / 圆角 ${gt.tokens?.radius.length ?? 0}`);
+  logger.log(`   视口: ${viewport.width}x${viewport.height}，能力: ${capabilities.join(", ") || "基础字段（旧版插件）"}`);
   if (!capabilities.some((c) => c.startsWith("rich-fields:auto-layout"))) {
-    console.log(`   ⚠️ 未检测到 auto-layout 字段——建议安装本仓库 plugin/ 的增强版插件（dtc plugin build）以获得布局字段，复杂布局保真度会显著提升`);
+    logger.log(`   ⚠️ 未检测到 auto-layout 字段——建议安装本仓库 plugin/ 的增强版插件（dtc plugin build）以获得布局字段，复杂布局保真度会显著提升`);
   }
-  if (assetCount > 0) console.log(`   素材: ${[...assetMap.values()].map((f) => f).slice(0, 5).join(", ")}${assetCount > 5 ? " ..." : ""}`);
+  if (assetCount > 0) logger.log(`   素材: ${[...assetMap.values()].map((f) => f).slice(0, 5).join(", ")}${assetCount > 5 ? " ..." : ""}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -166,12 +172,11 @@ export async function runExtract(opts: ExtractOptions): Promise<void> {
 
 async function extractAssets(
   client: FigmaRelayClient,
-  rootId: string,
+  rawTree: unknown,
   p: ReturnType<typeof dtcPaths>,
   opts: ExtractOptions,
+  logger: Logger = consoleLogger,
 ): Promise<{ capabilities: string[] }> {
-  // 先拿节点树再挑素材节点
-  const rawTree = await client.send("get_node_info", { nodeId: rootId }, 60_000);
   const { root, capabilities } = normalizeTalkToFigma(rawTree);
 
   const targets: UnifiedNode[] = [];
@@ -184,7 +189,7 @@ async function extractAssets(
 
   const max = opts.maxAssets ?? 60;
   if (targets.length > max) {
-    console.warn(`⚠️ 素材节点 ${targets.length} 个超过上限 ${max}，仅导出面积最大的前 ${max} 个（其余在 spec 中标记缺失）`);
+    logger.warn(`⚠️ 素材节点 ${targets.length} 个超过上限 ${max}，仅导出面积最大的前 ${max} 个（其余在 spec 中标记缺失）`);
     targets.sort((a, b) => (b.bbox?.width ?? 0) * (b.bbox?.height ?? 0) - (a.bbox?.width ?? 0) * (a.bbox?.height ?? 0));
     targets.length = max;
   }
@@ -212,16 +217,17 @@ async function extractAssets(
           file = path.join(p.assetsDir, `${base}.png`);
           fs.writeFileSync(file, Buffer.from(png.imageData, "base64"));
         }
-      } catch (e: any) {
-        console.warn(`⚠️ 素材 ${t.id}(${t.name}) 导出失败: ${e.message}`);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn(`⚠️ 素材 ${t.id}(${t.name}) 导出失败: ${message}`);
       }
     }
     if (file) {
       done += 1;
-      if (done % 10 === 0) console.log(`   素材 ${done}/${targets.length} ...`);
+      if (done % 10 === 0) logger.log(`   素材 ${done}/${targets.length} ...`);
     }
   }
-  console.log(`→ 素材导出: ${done}/${targets.length}`);
+  logger.log(`→ 素材导出: ${done}/${targets.length}`);
   return { capabilities };
 }
 

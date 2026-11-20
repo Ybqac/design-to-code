@@ -6,13 +6,16 @@
  * 让 fix-prompt 能说"节点 14669:9900（Submit Button）期望背景 #3B82F6，实际渲染 #60A5FA"。
  *
  * 坐标对齐约定：verify 在 diff 前已把两张图缩放到同尺寸（对齐图）。
- * 对齐图坐标 → Figma 坐标：figmaX = alignX / alignScale + rootOffset.x。
+ * 对齐图坐标 → Figma 坐标：figmaX = alignX * scaleX + offsetX，Y 用 scaleY。
+ * scaleX / scaleY 分开，是因为对比画布按参考图等比缩放，宽高取整后可能差 1px。
  */
 import type { AttributedNode, BBox, DiffRegion, GroundTruth, UnifiedNode } from "./schema.js";
 
 export interface AlignTransform {
-  /** 对齐图像素 → Figma px 的比例（如参考图 2x 导出且未缩放，则为 0.5） */
-  scale: number;
+  /** 对齐图像素 → Figma px，X 方向 */
+  scaleX: number;
+  /** 对齐图像素 → Figma px，Y 方向 */
+  scaleY: number;
   /** Figma 画布偏移（根节点 bbox 的 x/y） */
   offsetX: number;
   offsetY: number;
@@ -41,10 +44,10 @@ function intersect(a: BBox, b: BBox): number {
 /** 把对齐图坐标的 region bbox 转成 Figma 坐标 */
 export function regionToFigma(bbox: BBox, t: AlignTransform): BBox {
   return {
-    x: bbox.x * t.scale + t.offsetX,
-    y: bbox.y * t.scale + t.offsetY,
-    width: bbox.width * t.scale,
-    height: bbox.height * t.scale,
+    x: bbox.x * t.scaleX + t.offsetX,
+    y: bbox.y * t.scaleY + t.offsetY,
+    width: bbox.width * t.scaleX,
+    height: bbox.height * t.scaleY,
   };
 }
 

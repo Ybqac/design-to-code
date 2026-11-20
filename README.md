@@ -83,7 +83,7 @@ dtc doctor ──► dtc extract ──► 【人工闸口】结构确认 ──
 |---|---|
 | `dtc setup` | 全局安装六步，结束时 doctor。`--yes` 全自动（CI）。`--project <dir>` 只额外拷斜杠命令 |
 | `dtc relay <start\|stop\|status>` | 内置 relay。3055 已占用则复用；日志 `~/.dtc/relay.log` |
-| `dtc extract` | 提取规格包 → `.dtc/`。`--node <id>` 或 `--selection`（当前选区）；`--from-rest --file-key --pat`（REST 备用）；`--from-snapshot`（离线）；`--viewport`、`--ref-scale`、`--max-assets` |
+| `dtc extract` | 提取规格包 → `.dtc/`。`--node <id>` 或 `--selection`（当前选区）；`--from-rest --file-key`（REST 备用，读环境变量 `FIGMA_TOKEN`）；`--from-snapshot`（离线）；`--viewport`、`--ref-scale`、`--max-assets` |
 | `dtc sel` | 查看当前 Figma 选区（附现成提取命令） |
 | `dtc verify --url <url>` | 视觉回归闭环。退出码 `0` 收敛 / `1` 继续修复 / `2` 停滞需人工；产物 `report-N.json` + `diff.png` + `fix-prompt.md` |
 | `dtc check <dir>` | 反捏造：ground-truth 溯源 + 硬编码值反查 + 占位图红线 |
@@ -101,8 +101,9 @@ MCP server（stdio，7 工具）：`packages/mcp/dist/server.js`，由 setup 写
 | `~/.cursor/rules/dtc-anti-fabrication.mdc` | 反捏造四红线。同样整文件覆盖 |
 | `~/.agents/skills/design-to-code/SKILL.md` | setup 生成的 skill，步骤与规则同一顺序 |
 | `~/.dtc/relay.log` | relay 日志 |
-| `DTC_RELAY_PORT` | relay 进程监听端口，默认 3055。CLI 探测与提取默认连 3055 |
-| `--pat` | 只作为 `dtc extract --from-rest --file-key <key> --pat <token>` 的参数。代码不读 PAT 环境变量 |
+| `~/.dtc/relay.token` | relay join 口令。`dtc relay start` 生成，CLI 自动读。`dtc plugin build` 写入插件产物，不用在面板手填 |
+| `DTC_RELAY_PORT` | relay 进程监听端口，默认 3055，只绑 `127.0.0.1`。CLI 探测与提取默认连 3055 |
+| `FIGMA_TOKEN` | `dtc extract --from-rest --file-key <key>` 使用的 Figma personal access token。不放进命令行参数 |
 
 示例 mcp 条目见 `integrations/cursor/mcp.json`（占位说明，不是安装模板）。
 

@@ -121,6 +121,14 @@ function hexPrefix(color: string | undefined, len = 7): string | undefined {
   return color.toLowerCase().slice(0, len);
 }
 
+function normWeight(weight: number | string | undefined): string | undefined {
+  if (weight === undefined || weight === "") return undefined;
+  const text = String(weight).trim().toLowerCase();
+  if (text === "normal") return "400";
+  if (text === "bold") return "700";
+  return text;
+}
+
 export function structureCheck(observed: TextObservation[], expected: GtTextExpectation[]): StructureCheck {
   const mismatches: StructureCheck["mismatches"] = [];
   let matched = 0;
@@ -159,6 +167,18 @@ export function structureCheck(observed: TextObservation[], expected: GtTextExpe
         mismatches.push({ kind: "color", nodeId: exp.nodeId, expected: exp.textColor, actual: rgbToHex(obs.color), detail: obs.content.slice(0, 20) });
         ok = false;
       }
+    }
+    const expectedWeight = normWeight(exp.fontWeight);
+    const actualWeight = normWeight(obs.fontWeight);
+    if (expectedWeight && actualWeight && expectedWeight !== actualWeight) {
+      mismatches.push({
+        kind: "fontWeight",
+        nodeId: exp.nodeId,
+        expected: expectedWeight,
+        actual: actualWeight,
+        detail: obs.content.slice(0, 20),
+      });
+      ok = false;
     }
     if (ok) matched += 1;
   }

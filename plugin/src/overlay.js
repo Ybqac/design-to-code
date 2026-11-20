@@ -105,6 +105,11 @@
   (document.body || document.documentElement).appendChild(root);
 
   var $ = function (id) { return document.getElementById(id); };
+  var RELAY_TOKEN = "__DTC_RELAY_TOKEN__";
+  function relayToken() {
+    if (!RELAY_TOKEN || RELAY_TOKEN.indexOf("__DTC_") === 0) return "";
+    return RELAY_TOKEN;
+  }
   var channelInput = $("dtc-channel");
   var portInput = $("dtc-port");
   // channel 规范化：小写、去非法字符、限长——防误粘贴整句话进 channel（曾把报错文案存成 channel 名）
@@ -157,16 +162,27 @@
     if (state.socket) return;
     var port = parseInt(portInput.value, 10) || 3055;
     var channel = currentChannel();
+    var token = relayToken();
     channelInput.value = channel;
     LS.set("dtc:uiPort", String(port));
     LS.set("dtc:channel", channel);
+    if (!token) {
+      state.manualStop = true;
+      setStatus("err", "未构建");
+      log("err", "relay 口令未写入插件。运行 dtc plugin build 后重新打开插件");
+      return;
+    }
     setStatus("warn", "连接中…");
     log("info", "连接 ws://localhost:" + port + "（channel " + channel + "）");
     var ws;
     try { ws = new WebSocket("ws://localhost:" + port); }
     catch (e) { log("err", "WebSocket 创建失败: " + e.message); return scheduleReconnect(); }
     state.socket = ws;
-    ws.onopen = function () { ws.send(JSON.stringify({ type: "join", channel: channel })); };
+    ws.onopen = function () {
+      var join = { type: "join", channel: channel };
+      if (token) join.token = token;
+      ws.send(JSON.stringify(join));
+    };
     ws.onmessage = function (ev) {
       var data;
       try { data = JSON.parse(ev.data); } catch (e) { return; }
@@ -181,7 +197,17 @@
         }
         return;
       }
-      if (data.type === "error") { log("err", "relay 错误: " + (typeof msg === "string" ? msg : JSON.stringify(msg))); return; }
+      if (data.type === "error") {
+        var errText = typeof data.message === "string" ? data.message : JSON.stringify(data.message);
+        log("err", "relay 错误: " + errText);
+        if (errText.indexOf("invalid relay token") !== -1) {
+          state.manualStop = true;
+          setStatus("err", "token 无效");
+          log("err", "口令与本机 relay 不一致。运行 dtc plugin build 后重新打开插件");
+          try { ws.close(); } catch (e2) {}
+        }
+        return;
+      }
       if (data.type === "progress_update") return;
       if (msg && msg.command) {
         state.inCount++; bump();
@@ -189,7 +215,7 @@
         $("dtc-last").textContent = msg.command;
         log("cmd", "→ " + msg.command + " " + JSON.stringify(msg.params || {}).slice(0, 100));
         // 经 window 通道分发给同页 payload（code.js 的 dtc-bridge 监听器）
-        window.postMessage({ source: "dtc-bridge", dir: "to-sandbox", type: "execute-command", id: msg.id || data.id, command: msg.command, params: msg.params }, "*");
+        window.postMessage({ source: "dtc-bridge", dir: "to-sandbox", type: "execute-command", id: msg.id || data.id, command: msg.command, params: msg.params }, window.origin || "*");
       }
     };
     ws.onclose = function () {
@@ -212,6 +238,7 @@
 
   // ---- payload 侧回流（code.js 广播的 figma.ui.postMessage 镜像） ----
   window.addEventListener("message", function (e) {
+    if (e.source !== window) return;
     var d = e.data;
     if (!d || d.source !== "dtc-bridge" || d.dir !== "ui") return;
     var pm = d.msg || {};

@@ -14,31 +14,34 @@ import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { parseVerifyReport, type VerifyReport } from "@dtc/core";
 import { runDoctor, runExtract, runSel, runVerify, runCheck } from "@dtc/cli";
+import type { Logger } from "@dtc/cli";
 import { dtcPaths, reportPath } from "@dtc/cli";
 
 function text(t: string) {
   return { content: [{ type: "text" as const, text: t }] };
 }
 
-/** 捕获 console 输出转为 MCP 返回文本 */
-async function capture(fn: () => Promise<unknown>): Promise<string> {
+/** 把命令的 log/warn/error 收进返回文本。不替换全局 console。 */
+function collectingLogger(): { logger: Logger; text: () => string } {
   const chunks: string[] = [];
-  const orig = { log: console.log, warn: console.warn, error: console.error };
-  const push = (...args: unknown[]) => chunks.push(args.map(String).join(" "));
-  console.log = push;
-  console.warn = push;
-  console.error = push;
+  const push = (...args: unknown[]) => chunks.push(args.map((arg) => String(arg)).join(" "));
+  return {
+    logger: { log: push, warn: push, error: push },
+    text: () => chunks.join("\n"),
+  };
+}
+
+async function capture(fn: (logger: Logger) => Promise<unknown>): Promise<string> {
+  const captured = collectingLogger();
   try {
-    await fn();
-  } catch (e: any) {
-    chunks.push(`\n❌ ${e.message}`);
-  } finally {
-    console.log = orig.log;
-    console.warn = orig.warn;
-    console.error = orig.error;
+    await fn(captured.logger);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    captured.logger.error(`\n❌ ${message}`);
   }
-  return chunks.join("\n");
+  return captured.text();
 }
 
 const server = new McpServer({ name: "dtc", version: "0.1.0" });
@@ -49,8 +52,8 @@ server.tool(
   { channel: z.string().default("dtc"), out: z.string().default(".dtc") },
   async ({ channel, out }) => {
     let code = 0;
-    const t = await capture(async () => {
-      code = await runDoctor({ channel, out });
+    const t = await capture(async (logger) => {
+      code = await runDoctor({ channel, out }, logger);
     });
     return text(`${t}\nexit=${code}`);
   },
@@ -71,8 +74,8 @@ server.tool(
     if (!node && !selection) {
       return text("❌ 需要 node（nodeId）或 selection=true（取当前选区）。可先调 dtc_sel 查看用户当前选中的节点。");
     }
-    const t = await capture(() =>
-      runExtract({ node, selection, channel, out, viewport, maxAssets: max_assets }),
+    const t = await capture((logger) =>
+      runExtract({ node, selection, channel, out, viewport, maxAssets: max_assets }, logger),
     );
     return text(t);
   },
@@ -85,7 +88,7 @@ server.tool(
     channel: z.string().default("dtc"),
   },
   async ({ channel }) => {
-    const t = await capture(() => runSel({ channel }));
+    const t = await capture((logger) => runSel({ channel }, logger));
     return text(t);
   },
 );
@@ -103,7 +106,7 @@ server.tool(
   },
   async ({ url, out, viewport, full_page, score_threshold, max_rounds }) => {
     let code = 0;
-    const t = await capture(async () => {
+    const t = await capture(async (logger) => {
       code = await runVerify({
         url,
         out,
@@ -111,7 +114,7 @@ server.tool(
         fullPage: full_page,
         scoreThreshold: score_threshold,
         maxRounds: max_rounds,
-      });
+      }, logger);
     });
     return text(`${t}\nexit=${code}（0=收敛 1=继续修正 2=停滞需人工）`);
   },
@@ -129,23 +132,14 @@ server.tool(
     const r = round ?? (await import("@dtc/cli").then((m) => m.nextRound(p.verifyDir)) - 1);
     const file = reportPath(p.verifyDir, r);
     if (!fs.existsSync(file)) return text(`未找到报告: ${file}（先跑 dtc_verify）`);
-    const report = JSON.parse(fs.readFileSync(file, "utf8"));
-    const summary = {
-      round: report.round,
-      fidelityScore: report.fidelityScore,
-      pixel: report.pixel,
-      structure: report.structure ? { score: report.structure.score, mismatches: report.structure.mismatches.length } : undefined,
-      convergence: report.convergence,
-      regions: report.regions.map((x: any) => ({
-        id: x.id,
-        severity: x.severity,
-        bbox: x.bbox,
-        diffPixels: x.diffPixels,
-        nodes: x.attributedNodes.map((n: any) => ({ nodeId: n.nodeId, name: n.name, expected: n.expected, actual: n.actual })),
-      })),
-      reportFile: file,
-    };
-    return text(JSON.stringify(summary, null, 2));
+    let report: VerifyReport;
+    try {
+      report = parseVerifyReport(JSON.parse(fs.readFileSync(file, "utf8")));
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return text(`报告无法解析: ${file}（${message}）`);
+    }
+    return text(summarizeReport(report, file));
   },
 );
 
@@ -169,12 +163,39 @@ server.tool(
   },
   async ({ code_dir, out }) => {
     let code = 0;
-    const t = await capture(async () => {
-      code = await runCheck({ codeDir: code_dir, out });
+    const t = await capture(async (logger) => {
+      code = await runCheck({ codeDir: code_dir, out }, logger);
     });
     return text(`${t}\nexit=${code}`);
   },
 );
+
+function summarizeReport(report: VerifyReport, file: string): string {
+  const regions = report.regions.map((region) => ({
+    id: region.id,
+    severity: region.severity,
+    bbox: region.bbox,
+    diffPixels: region.diffPixels,
+    nodes: region.attributedNodes.map((node) => ({
+      nodeId: node.nodeId,
+      name: node.name,
+      expected: node.expected,
+      actual: node.actual,
+    })),
+  }));
+  const structure = report.structure
+    ? { score: report.structure.score, mismatches: report.structure.mismatches.length }
+    : undefined;
+  return JSON.stringify({
+    round: report.round,
+    fidelityScore: report.fidelityScore,
+    pixel: report.pixel,
+    structure,
+    convergence: report.convergence,
+    regions,
+    reportFile: file,
+  }, null, 2);
+}
 
 async function main() {
   const transport = new StdioServerTransport();
@@ -182,7 +203,8 @@ async function main() {
   console.error("dtc-mcp ready (stdio)");
 }
 
-main().catch((e: Error) => {
-  console.error(`dtc-mcp failed: ${e.message}`);
+main().catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`dtc-mcp failed: ${message}`);
   process.exit(1);
 });

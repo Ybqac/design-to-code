@@ -3,7 +3,7 @@
  *
  * 端口 3055 已有监听则复用，不重复启动。
  */
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
@@ -46,6 +46,27 @@ function pidAlive(pid: number): boolean {
   }
 }
 
+/** pid 文件可能被系统回收。只对命令行里带 relay-main 的进程发信号。 */
+export function commandLooksLikeRelay(command: string): boolean {
+  return command.includes("relay-main");
+}
+
+function processCommand(pid: number): string | null {
+  try {
+    return execFileSync("ps", ["-p", String(pid), "-o", "command="], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+function isOurRelay(pid: number): boolean {
+  const command = processCommand(pid);
+  return command !== null && commandLooksLikeRelay(command);
+}
+
 export async function runRelay(action: string): Promise<number> {
   if (action === "status") {
     const up = await relayUp();
@@ -84,16 +105,25 @@ export async function runRelay(action: string): Promise<number> {
     try {
       console.error(fs.readFileSync(LOG_FILE, "utf8").split("\n").slice(-10).join("\n"));
     } catch { /* ignore */ }
+    if (child.pid && pidAlive(child.pid)) {
+      try { process.kill(child.pid, "SIGTERM"); } catch { /* 已退出 */ }
+    }
+    fs.rmSync(PID_FILE, { force: true });
     return 1;
   }
 
   if (action === "stop") {
     const pid = readPid();
     if (pid && pidAlive(pid)) {
-      process.kill(pid, "SIGTERM");
-      fs.rmSync(PID_FILE, { force: true });
-      console.log(`✅ relay 已停止（pid ${pid}）`);
-      return 0;
+      if (!isOurRelay(pid)) {
+        fs.rmSync(PID_FILE, { force: true });
+        console.log(`⚠️ pid ${pid} 不是 dtc relay，未发送信号`);
+      } else {
+        process.kill(pid, "SIGTERM");
+        fs.rmSync(PID_FILE, { force: true });
+        console.log(`✅ relay 已停止（pid ${pid}）`);
+        return 0;
+      }
     }
     fs.rmSync(PID_FILE, { force: true });
     if (await relayUp()) {

@@ -8,20 +8,26 @@ import fs from "node:fs";
 import path from "node:path";
 import pixelmatch from "pixelmatch";
 import { PNG } from "pngjs";
-import { chromium } from "playwright";
+import { chromium, type Page } from "playwright";
 import {
   attributeRegions,
   clusterDiffPixels,
   evaluateConvergence,
   fidelityScore,
   findNodeAtPoint,
+  parseDtcManifest,
+  parseGroundTruth,
+  parseUnifiedNode,
+  parseVerifyReport,
   pixelScore,
   renderFixPrompt,
   structureCheck,
 } from "@dtc/core";
-import type { DomProbe, GroundTruth, UnifiedNode, VerifyReport } from "@dtc/core";
-import { readPng, writePng, alignTo } from "../image.js";
+import type { AlignTransform, DomProbe, DtcManifest, GroundTruth, UnifiedNode, VerifyReport } from "@dtc/core";
+import { consoleLogger, type Logger } from "../logger.js";
+import { readPng, writePng, scaleRefToWidth, fitScreenshot } from "../image.js";
 import { dtcPaths, nextRound, reportPath } from "../paths.js";
+import { parseJsonFile } from "../read-json.js";
 
 export interface VerifyOptions {
   url: string; // http(s):// 或 file:// 或本地 html 路径
@@ -38,127 +44,121 @@ export interface VerifyOptions {
 
 const PROBE_REGIONS = 12; // 最多探针的热区数
 
-export async function runVerify(opts: VerifyOptions): Promise<number> {
+export async function runVerify(opts: VerifyOptions, logger: Logger = consoleLogger): Promise<number> {
   const p = dtcPaths(opts.out ?? ".dtc");
   if (!fs.existsSync(p.refImage)) throw new Error(`参考图不存在: ${p.refImage}（先运行 dtc extract）`);
   if (!fs.existsSync(p.groundTruth)) throw new Error(`ground-truth 不存在: ${p.groundTruth}`);
   if (!fs.existsSync(p.unifiedTree)) throw new Error(`unified-tree 不存在: ${p.unifiedTree}`);
 
-  const gt: GroundTruth = JSON.parse(fs.readFileSync(p.groundTruth, "utf8"));
-  const root: UnifiedNode = JSON.parse(fs.readFileSync(p.unifiedTree, "utf8"));
+  const gt: GroundTruth = parseJsonFile(p.groundTruth, parseGroundTruth);
+  const root: UnifiedNode = parseJsonFile(p.unifiedTree, parseUnifiedNode);
   if (!root.bbox) throw new Error("unified-tree 根节点缺 bbox");
+  const frame = root.bbox;
 
-  const manifest = fs.existsSync(p.manifest) ? JSON.parse(fs.readFileSync(p.manifest, "utf8")) : {};
+  const manifest: DtcManifest | undefined = fs.existsSync(p.manifest)
+    ? parseJsonFile(p.manifest, parseDtcManifest)
+    : undefined;
   const viewport = opts.viewport
     ? parseViewport(opts.viewport)
-    : manifest.viewport ?? { width: Math.round(root.bbox.width), height: Math.round(root.bbox.height) };
+    : manifest?.viewport ?? { width: Math.round(frame.width), height: Math.round(frame.height) };
 
   const round = opts.round ?? nextRound(p.verifyDir);
   fs.mkdirSync(p.verifyDir, { recursive: true });
 
-  // 1. 渲染截图
+  // 1. 渲染截图。浏览器在 finally 里关，截图或探针抛错也不会留下 Chromium。
   const target = normalizeUrl(opts.url);
-  console.log(`→ Playwright: ${target} @ ${viewport.width}x${viewport.height}${opts.fullPage ? " (fullPage)" : ""}`);
-  const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport, deviceScaleFactor: 1 });
-  await page.goto(target, { waitUntil: "networkidle", timeout: 60_000 }).catch(async (e: Error) => {
-    // 某些 dev server networkidle 慢，回退 load
-    await page.goto(target, { waitUntil: "load", timeout: 60_000 }).catch(() => {
-      throw e;
-    });
-  });
-  await page.evaluate(() => document.fonts?.ready?.catch(() => {}));
-  if (opts.waitMs) await page.waitForTimeout(opts.waitMs);
-  const shotBuf = await page.screenshot({ fullPage: opts.fullPage ?? false });
-  const implPng = PNG.sync.read(shotBuf);
-
-  // 2. 对齐 + diff
-  const refPng = readPng(p.refImage);
-  const refAligned = alignTo(implPng, refPng);
-  const diffPng = new PNG({ width: implPng.width, height: implPng.height });
+  logger.log(`→ Playwright: ${target} @ ${viewport.width}x${viewport.height}${opts.fullPage ? " (fullPage)" : ""}`);
   const threshold = opts.pixelThreshold ?? 0.1;
-  const diffPixels = pixelmatch(refAligned.data as any, implPng.data as any, diffPng.data as any, implPng.width, implPng.height, {
-    threshold,
-    includeAA: false,
-    alpha: 0.3,
-    diffColor: [255, 0, 255], // 品红：与常见设计色区分，供聚类复扫
-    diffColorAlt: [255, 0, 255],
-  });
-  const totalPixels = implPng.width * implPng.height;
-  const diffRatio = diffPixels / totalPixels;
-  writePng(path.join(p.verifyDir, "impl.png"), implPng);
-  writePng(path.join(p.verifyDir, "diff.png"), diffPng);
-  console.log(`→ pixelmatch: ${diffPixels}/${totalPixels} 差异像素（ratio=${(diffRatio * 100).toFixed(2)}%）`);
+  const captured = await withBrowser(viewport, target, opts.waitMs ?? 500, async (page) => {
+    const shotBuf = await page.screenshot({ fullPage: opts.fullPage ?? false });
+    const implShot = PNG.sync.read(shotBuf);
 
-  // 3. 热区聚类（扫描 diff 图上的品红标记）
-  const regions = clusterDiffPixels(implPng.width, implPng.height, (x: number, y: number) => {
-    const i = (y * implPng.width + x) * 4;
-    return diffPng.data[i] > 250 && diffPng.data[i + 2] > 250 && diffPng.data[i + 1] < 20;
-  });
-  console.log(`→ 聚类: ${regions.length} 个热区`);
-
-  // 4. DOM 探针：热区中心 elementFromPoint + 全页文本节点
-  const transform = {
-    scale: root.bbox.width / implPng.width,
-    offsetX: root.bbox.x,
-    offsetY: root.bbox.y,
-  };
-  const probes = new Map<string, DomProbe>();
-  const probePoints = regions.slice(0, PROBE_REGIONS).map((r: { id: string; bbox: { x: number; y: number; width: number; height: number } }) => ({
-    regionId: r.id,
-    x: Math.min(implPng.width - 1, Math.max(0, Math.round(r.bbox.x + r.bbox.width / 2))),
-    y: Math.min(implPng.height - 1, Math.max(0, Math.round(r.bbox.y + r.bbox.height / 2))),
-  }));
-  const probeResults: Array<(DomProbe & { x: number; y: number }) | null> = await page.evaluate((points) => {
-    return points.map((pt: { x: number; y: number }) => {
-      const el = document.elementFromPoint(pt.x, pt.y);
-      if (!el) return null;
-      const cs = getComputedStyle(el);
-      const rect = el.getBoundingClientRect();
-      return {
-        x: pt.x,
-        y: pt.y,
-        tag: el.tagName.toLowerCase(),
-        text: (el.textContent ?? "").trim().slice(0, 40),
-        background: cs.backgroundColor,
-        color: cs.color,
-        fontSize: cs.fontSize,
-        fontWeight: cs.fontWeight,
-        borderRadius: cs.borderRadius,
-        boxShadow: cs.boxShadow !== "none" ? cs.boxShadow : undefined,
-        size: { width: rect.width, height: rect.height },
-        snippet: `${el.tagName.toLowerCase()}${el.className && typeof el.className === "string" ? "." + el.className.split(/\s+/).slice(0, 2).join(".") : ""}`,
-      };
+    // 2. 参考图按宽度等比缩放，截图裁进同一画布。宽高比不一致时不再拉伸。
+    const refPng = readPng(p.refImage);
+    const refAligned = scaleRefToWidth(refPng, implShot.width);
+    const implAligned = fitScreenshot(implShot, refAligned.width, refAligned.height);
+    const diffPng = new PNG({ width: refAligned.width, height: refAligned.height });
+    const diffPixels = pixelmatch(refAligned.data, implAligned.data, diffPng.data, refAligned.width, refAligned.height, {
+      threshold,
+      includeAA: false,
+      alpha: 0.3,
+      diffColor: [255, 0, 255],
+      diffColorAlt: [255, 0, 255],
     });
-  }, probePoints);
-  for (const pr of probeResults) {
-    if (!pr) continue;
-    const fx = pr.x * transform.scale + transform.offsetX;
-    const fy = pr.y * transform.scale + transform.offsetY;
-    const node = findNodeAtPoint(root, fx, fy);
-    if (node && !probes.has(node.id)) {
-      const { x: _x, y: _y, ...probe } = pr;
-      probes.set(node.id, probe);
+    const regions = clusterDiffPixels(refAligned.width, refAligned.height, (x, y) => {
+      const i = (y * refAligned.width + x) * 4;
+      return diffPng.data[i] > 250 && diffPng.data[i + 2] > 250 && diffPng.data[i + 1] < 20;
+    });
+    const transform: AlignTransform = {
+      scaleX: frame.width / refAligned.width,
+      scaleY: frame.height / refAligned.height,
+      offsetX: frame.x,
+      offsetY: frame.y,
+    };
+    const probePoints = regions.slice(0, PROBE_REGIONS).flatMap((r) => {
+      const x = Math.round(r.bbox.x + r.bbox.width / 2);
+      const y = Math.round(r.bbox.y + r.bbox.height / 2);
+      if (x < 0 || y < 0 || x >= implShot.width || y >= implShot.height) return [];
+      return [{ x, y }];
+    });
+    const probeResults: Array<(DomProbe & { x: number; y: number }) | null> = await page.evaluate((points) => {
+      return points.map((pt: { x: number; y: number }) => {
+        const el = document.elementFromPoint(pt.x, pt.y);
+        if (!el) return null;
+        const cs = getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+        return {
+          x: pt.x,
+          y: pt.y,
+          tag: el.tagName.toLowerCase(),
+          text: (el.textContent ?? "").trim().slice(0, 40),
+          background: cs.backgroundColor,
+          color: cs.color,
+          fontSize: cs.fontSize,
+          fontWeight: cs.fontWeight,
+          borderRadius: cs.borderRadius,
+          boxShadow: cs.boxShadow !== "none" ? cs.boxShadow : undefined,
+          size: { width: rect.width, height: rect.height },
+          snippet: `${el.tagName.toLowerCase()}${el.className && typeof el.className === "string" ? "." + el.className.split(/\s+/).slice(0, 2).join(".") : ""}`,
+        };
+      });
+    }, probePoints);
+    const probes = new Map<string, DomProbe>();
+    for (const pr of probeResults) {
+      if (!pr) continue;
+      const fx = pr.x * transform.scaleX + transform.offsetX;
+      const fy = pr.y * transform.scaleY + transform.offsetY;
+      const node = findNodeAtPoint(root, fx, fy);
+      if (node && !probes.has(node.id)) {
+        const { x: _x, y: _y, ...probe } = pr;
+        probes.set(node.id, probe);
+      }
     }
-  }
-
-  // 5. 结构校验（文本内容/字号/颜色）
-  const domTexts = await page.evaluate(() => {
-    const out: Array<{ content: string; fontSize: number; color: string }> = [];
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    const seen = new Set<Element>();
-    while (walker.nextNode()) {
-      const t = walker.currentNode as Text;
-      const content = (t.textContent ?? "").trim();
-      if (!content) continue;
-      const el = t.parentElement;
-      if (!el || seen.has(el)) continue;
-      seen.add(el);
-      const cs = getComputedStyle(el);
-      out.push({ content, fontSize: parseFloat(cs.fontSize), color: cs.color });
-    }
-    return out;
+    const domTexts = await page.evaluate(() => {
+      const out: Array<{ content: string; fontSize: number; color: string; fontWeight: string }> = [];
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      const seen = new Set<Element>();
+      while (walker.nextNode()) {
+        const t = walker.currentNode as Text;
+        const content = (t.textContent ?? "").trim();
+        if (!content) continue;
+        const el = t.parentElement;
+        if (!el || seen.has(el)) continue;
+        seen.add(el);
+        const cs = getComputedStyle(el);
+        out.push({ content, fontSize: parseFloat(cs.fontSize), color: cs.color, fontWeight: cs.fontWeight });
+      }
+      return out;
+    });
+    return { implAligned, refPng, diffPng, diffPixels, regions, transform, probes, domTexts };
   });
+  const { implAligned, refPng, diffPng, diffPixels, regions, transform, probes, domTexts } = captured;
+  const totalPixels = implAligned.width * implAligned.height;
+  const diffRatio = diffPixels / totalPixels;
+  writePng(path.join(p.verifyDir, "impl.png"), implAligned);
+  writePng(path.join(p.verifyDir, "diff.png"), diffPng);
+  logger.log(`→ pixelmatch: ${diffPixels}/${totalPixels} 差异像素（ratio=${(diffRatio * 100).toFixed(2)}%）`);
+  logger.log(`→ 聚类: ${regions.length} 个热区`);
   const gtTexts = gt.raw_styles
     .filter((s: { role?: string; name?: string }) => s.role === "text" && s.name !== undefined)
     .map((s: { nodeId: string; name?: string; textStyle?: { fontSize?: number; fontWeight?: number | string }; textColor?: string }) => ({
@@ -185,9 +185,7 @@ export async function runVerify(opts: VerifyOptions): Promise<number> {
   };
   walkText(root);
   const structure = structureCheck(domTexts, gtTextsFromTree.length ? gtTextsFromTree : gtTexts);
-  console.log(`→ 结构校验: 文本 ${structure.textMatched}/${structure.textChecked} 匹配（score=${structure.score}）`);
-
-  await browser.close();
+  logger.log(`→ 结构校验: 文本 ${structure.textMatched}/${structure.textChecked} 匹配（score=${structure.score}）`);
 
   // 6. 归因（DOM 探针 keyed by nodeId）
   attributeRegions(regions, root, transform, gt, probes);
@@ -196,7 +194,7 @@ export async function runVerify(opts: VerifyOptions): Promise<number> {
   const pScore = pixelScore(diffRatio);
   const fScore = fidelityScore({ diffRatio, threshold, structure });
   const prevPath = reportPath(p.verifyDir, round - 1);
-  const previous = round > 1 && fs.existsSync(prevPath) ? (JSON.parse(fs.readFileSync(prevPath, "utf8")) as VerifyReport) : undefined;
+  const previous = readPreviousReport(prevPath, round, logger);
   const convergence = evaluateConvergence(
     fScore,
     previous,
@@ -209,7 +207,7 @@ export async function runVerify(opts: VerifyOptions): Promise<number> {
     generated_at: new Date().toISOString(),
     round,
     target: { url: opts.url, viewport, fullPage: opts.fullPage ?? false, state: "default" },
-    reference: { image: "ref/frame.png", width: refPng.width, height: refPng.height, scaleUsed: manifest.ref_scale },
+    reference: { image: "ref/frame.png", width: refPng.width, height: refPng.height, scaleUsed: manifest?.ref_scale },
     pixel: { score: pScore, diffRatio, threshold, diffImage: "diff.png", clusters: regions.length },
     structure,
     fidelityScore: fScore,
@@ -225,28 +223,61 @@ export async function runVerify(opts: VerifyOptions): Promise<number> {
   report.fixPromptPath = fp;
 
   // 8. 摘要
-  console.log(`\n📊 第 ${round} 轮验证 → ${rp}`);
-  console.log(`   Fidelity Score: ${fScore}/100（像素 ${pScore} + 结构 ${structure.score}，阈值 ${convergence.threshold}）`);
-  if (previous) console.log(`   上轮: ${previous.fidelityScore} → 本轮: ${fScore}`);
+  logger.log(`\n📊 第 ${round} 轮验证 → ${rp}`);
+  logger.log(`   Fidelity Score: ${fScore}/100（像素 ${pScore} + 结构 ${structure.score}，阈值 ${convergence.threshold}）`);
+  if (previous) logger.log(`   上轮: ${previous.fidelityScore} → 本轮: ${fScore}`);
   const top = regions.slice(0, 5);
   for (const r of top) {
     const b = r.bbox;
     const nodes = r.attributedNodes.map((n) => `${n.nodeId}${n.name ? `(${n.name})` : ""}`).join(", ");
-    console.log(`   ${r.id} [${r.severity}] (${Math.round(b.x)},${Math.round(b.y)},${Math.round(b.width)}x${Math.round(b.height)}) ${r.diffPixels}px → ${nodes || "未归因"}`);
+    logger.log(`   ${r.id} [${r.severity}] (${Math.round(b.x)},${Math.round(b.y)},${Math.round(b.width)}x${Math.round(b.height)}) ${r.diffPixels}px → ${nodes || "未归因"}`);
   }
   if (structure.mismatches.length) {
-    console.log(`   结构不匹配 ${structure.mismatches.length} 条（详见 report）`);
+    logger.log(`   结构不匹配 ${structure.mismatches.length} 条（详见 report）`);
   }
   if (convergence.converged) {
-    console.log(`\n✅ 已收敛（${convergence.reason}）。fix-prompt: ${fp}`);
+    logger.log(`\n✅ 已收敛（${convergence.reason}）。fix-prompt: ${fp}`);
     return 0;
   }
   if (convergence.stop) {
-    console.log(`\n⛔ 停止迭代: ${convergence.reason}。剩余差异与建议见: ${fp}`);
+    logger.log(`\n⛔ 停止迭代: ${convergence.reason}。剩余差异与建议见: ${fp}`);
     return 2;
   }
-  console.log(`\n🟡 继续修正 → 按 ${fp} 修复后重新运行 dtc verify`);
+  logger.log(`\n🟡 继续修正 → 按 ${fp} 修复后重新运行 dtc verify`);
   return 1;
+}
+
+async function withBrowser<T>(
+  viewport: { width: number; height: number },
+  url: string,
+  waitMs: number,
+  fn: (page: Page) => Promise<T>,
+): Promise<T> {
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage({ viewport, deviceScaleFactor: 1 });
+    await page.goto(url, { waitUntil: "networkidle", timeout: 60_000 }).catch(async (error: unknown) => {
+      await page.goto(url, { waitUntil: "load", timeout: 60_000 }).catch(() => {
+        throw error instanceof Error ? error : new Error(String(error));
+      });
+    });
+    await page.evaluate(() => document.fonts?.ready?.catch(() => {}));
+    if (waitMs > 0) await page.waitForTimeout(waitMs);
+    return await fn(page);
+  } finally {
+    await browser.close();
+  }
+}
+
+function readPreviousReport(file: string, round: number, logger: Logger = consoleLogger): VerifyReport | undefined {
+  if (round <= 1 || !fs.existsSync(file)) return undefined;
+  try {
+    return parseJsonFile(file, parseVerifyReport);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(`⚠️ 上一轮报告无法解析，本轮不计入停滞: ${message}`);
+    return undefined;
+  }
 }
 
 function parseViewport(v: string): { width: number; height: number } {

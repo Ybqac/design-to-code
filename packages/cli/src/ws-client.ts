@@ -11,11 +11,14 @@
  */
 import { randomUUID } from "node:crypto";
 import WebSocket from "ws";
+import { readRelayToken } from "./relay-token.js";
 
 export interface RelayOptions {
   url?: string; // 默认 ws://localhost:3055
   timeoutMs?: number; // 命令超时，默认 30000
   joinTimeoutMs?: number; // join 超时，默认 8000
+  /** 缺省读 ~/.dtc/relay.token。文件不存在时不带 token（仅能连不校验口令的外部 relay）。 */
+  token?: string;
 }
 
 interface Pending {
@@ -31,11 +34,13 @@ export class FigmaRelayClient {
   readonly url: string;
   readonly timeoutMs: number;
   readonly joinTimeoutMs: number;
+  private readonly token?: string;
 
   constructor(opts: RelayOptions = {}) {
     this.url = opts.url ?? "ws://localhost:3055";
     this.timeoutMs = opts.timeoutMs ?? 30_000;
     this.joinTimeoutMs = opts.joinTimeoutMs ?? 8_000;
+    this.token = opts.token;
   }
 
   private connect(): Promise<WebSocket> {
@@ -79,6 +84,12 @@ export class FigmaRelayClient {
     try {
       msg = JSON.parse(raw);
     } catch {
+      return;
+    }
+
+    if (msg.type === "error") {
+      const id = typeof msg.id === "string" ? msg.id : undefined;
+      if (id) this.settle(id, new Error(typeof msg.message === "string" ? msg.message : "relay error"));
       return;
     }
 
@@ -132,7 +143,10 @@ export class FigmaRelayClient {
         armTimer: arm,
       });
     });
-    ws.send(JSON.stringify({ id, type: "join", channel }));
+    const token = this.token ?? readRelayToken();
+    const join: Record<string, unknown> = { id, type: "join", channel };
+    if (token) join.token = token;
+    ws.send(JSON.stringify(join));
     await ok;
     this.channel = channel;
   }
